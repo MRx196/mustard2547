@@ -75,7 +75,7 @@ export const mockDb = {
     if (!localStorage.getItem('audit_logs')) localStorage.setItem('audit_logs', JSON.stringify(INITIAL_AUDIT));
     if (!localStorage.getItem('chart_of_accounts')) localStorage.setItem('chart_of_accounts', JSON.stringify(INITIAL_COA));
     if (!localStorage.getItem('journal_entries')) localStorage.setItem('journal_entries', '[]');
-    if (!localStorage.getItem('sms_wallet')) localStorage.setItem('sms_wallet', '5000');
+    if (!localStorage.getItem('sms_wallet')) localStorage.setItem('sms_wallet', '0');
     if (!localStorage.getItem('sms_settings')) {
       localStorage.setItem('sms_settings', JSON.stringify({
         selected_provider: 'Arkesel',

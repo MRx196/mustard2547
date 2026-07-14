@@ -51,11 +51,7 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
   };
 
   const [beneficiariesForm, setBeneficiariesForm] = useState<Omit<Beneficiary, 'id' | 'member_id'>[]>([
-    { ...emptyBeneficiary, relationship: 'Spouse', percentage: 40 },
-    { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-    { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-    { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-    { ...emptyBeneficiary, relationship: 'Sister', percentage: 15 }
+    { ...emptyBeneficiary, relationship: 'Spouse', percentage: 100 }
   ]);
 
   const [errorMsg, setErrorMsg] = useState('');
@@ -98,8 +94,8 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
     setGender(m.gender);
     setDob(m.dob);
     setMaritalStatus(m.marital_status);
-    setHouseNoGps(m.house_no_gps);
-    setLandmark(m.landmark);
+    setHouseNoGps(m.house_no_gps || '');
+    setLandmark(m.landmark || '');
     setCongregation(m.congregation);
     setEmail(m.email || '');
     setGroupName(m.group_name || '');
@@ -117,14 +113,9 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
       phone_number: b.phone_number
     }));
 
-    // Prepopulate at least 5
     if (activeB.length === 0) {
       setBeneficiariesForm([
-        { ...emptyBeneficiary, relationship: 'Spouse', percentage: 40 },
-        { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-        { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-        { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-        { ...emptyBeneficiary, relationship: 'Sister', percentage: 15 }
+        { ...emptyBeneficiary, relationship: 'Spouse', percentage: 100 }
       ]);
     } else {
       setBeneficiariesForm(activeB);
@@ -145,21 +136,19 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
     setErrorMsg('');
     setSuccessMsg('');
 
-    if (!fullName || !dob || !houseNoGps || !landmark || !congregation || !occupation || !phoneNumber) {
+    if (!fullName || !dob || !congregation || !occupation || !phoneNumber) {
       setErrorMsg('Please fill in all required member details fields.');
       return;
     }
 
     const activeBeneficiaries = beneficiariesForm.filter(b => b.full_name.trim() !== '');
-    if (activeBeneficiaries.length < 5) {
-      setErrorMsg('Requirement violation: At least 5 beneficiary nominations are required.');
-      return;
-    }
 
-    const totalPct = activeBeneficiaries.reduce((sum, b) => sum + b.percentage, 0);
-    if (Math.abs(totalPct - 100) > 0.01) {
-      setErrorMsg(`Total percentage allocation must sum to exactly 100%. Current sum: ${totalPct}%`);
-      return;
+    if (activeBeneficiaries.length > 0) {
+      const totalPct = activeBeneficiaries.reduce((sum, b) => sum + b.percentage, 0);
+      if (Math.abs(totalPct - 100) > 0.01) {
+        setErrorMsg(`Total percentage allocation for beneficiaries must sum to exactly 100%. Current sum: ${totalPct}%`);
+        return;
+      }
     }
 
     try {
@@ -462,12 +451,12 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>House No. or GPS Address *</label>
-                    <input type="text" value={houseNoGps} onChange={(e) => setHouseNoGps(e.target.value)} placeholder="e.g. SG-120-1200" required />
+                    <label>House No. or GPS Address</label>
+                    <input type="text" value={houseNoGps} onChange={(e) => setHouseNoGps(e.target.value)} placeholder="e.g. SG-120-1200" />
                   </div>
                   <div className="form-group">
-                    <label>Landmark (GPS backup) *</label>
-                    <input type="text" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="e.g. Behind Assembly" required />
+                    <label>Landmark (GPS backup)</label>
+                    <input type="text" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="e.g. Behind Assembly" />
                   </div>
                   <div className="form-group">
                     <label>Fellowship Group Name</label>
@@ -478,7 +467,7 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                 {/* Beneficiaries Nominee Forms */}
                 <div className="flex justify-between align-center" style={{ margin: '16px 0 8px 0', borderBottom: '2px solid var(--primary)', paddingBottom: '4px' }}>
                   <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--primary)' }}>
-                    Beneficiary Nominations (Minimum 5 required)
+                    Beneficiary Nominations
                   </h3>
                   <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={handleAddBeneficiaryField}>
                     + Add Nomination
@@ -490,19 +479,19 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                     <div key={idx} className="beneficiary-item-card">
                       <div className="form-row">
                         <div className="form-group">
-                          <label>Nomination #{idx + 1} Name *</label>
-                          <input type="text" value={b.full_name} onChange={(e) => handleBeneficiaryChange(idx, 'full_name', e.target.value)} placeholder="Full Name" required={idx < 5} />
+                          <label>Nomination #{idx + 1} Name</label>
+                          <input type="text" value={b.full_name} onChange={(e) => handleBeneficiaryChange(idx, 'full_name', e.target.value)} placeholder="Full Name" />
                         </div>
                         <div className="form-group" style={{ maxWidth: '90px' }}>
-                          <label>Age *</label>
-                          <input type="number" value={b.age || ''} onChange={(e) => handleBeneficiaryChange(idx, 'age', e.target.value)} placeholder="Age" required={idx < 5} min={0} />
+                          <label>Age</label>
+                          <input type="number" value={b.age || ''} onChange={(e) => handleBeneficiaryChange(idx, 'age', e.target.value)} placeholder="Age" required={!!b.full_name.trim()} min={0} />
                         </div>
                         <div className="form-group" style={{ maxWidth: '100px' }}>
-                          <label>Share (%) *</label>
-                          <input type="number" value={b.percentage || ''} onChange={(e) => handleBeneficiaryChange(idx, 'percentage', e.target.value)} placeholder="%" required={idx < 5} min={0} max={100} />
+                          <label>Share (%)</label>
+                          <input type="number" value={b.percentage || ''} onChange={(e) => handleBeneficiaryChange(idx, 'percentage', e.target.value)} placeholder="%" required={!!b.full_name.trim()} min={0} max={100} />
                         </div>
                         <div className="form-group">
-                          <label>Relationship *</label>
+                          <label>Relationship</label>
                           <select value={b.relationship} onChange={(e) => handleBeneficiaryChange(idx, 'relationship', e.target.value)}>
                             <option value="Spouse">Spouse</option>
                             <option value="Son">Son</option>
@@ -514,14 +503,14 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                           </select>
                         </div>
                         <div className="form-group">
-                          <label>Phone Number *</label>
-                          <input type="text" value={b.phone_number} onChange={(e) => handleBeneficiaryChange(idx, 'phone_number', e.target.value)} placeholder="Phone" required={idx < 5} />
+                          <label>Phone Number</label>
+                          <input type="text" value={b.phone_number} onChange={(e) => handleBeneficiaryChange(idx, 'phone_number', e.target.value)} placeholder="Phone" required={!!b.full_name.trim()} />
                         </div>
                       </div>
                       <div className="form-row" style={{ marginTop: '8px' }}>
                         <div className="form-group">
-                          <label>GPS Address *</label>
-                          <input type="text" value={b.house_number} onChange={(e) => handleBeneficiaryChange(idx, 'house_number', e.target.value)} placeholder="GPS Location" required={idx < 5} />
+                          <label>GPS Address</label>
+                          <input type="text" value={b.house_number} onChange={(e) => handleBeneficiaryChange(idx, 'house_number', e.target.value)} placeholder="GPS Location" required={!!b.full_name.trim()} />
                         </div>
                         <div className="form-group">
                           <label>Marital Status</label>
@@ -533,7 +522,7 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                         </div>
                       </div>
 
-                      {beneficiariesForm.length > 5 && (
+                      {beneficiariesForm.length > 1 && (
                         <button type="button" className="beneficiary-remove-btn" onClick={() => handleRemoveBeneficiaryField(idx)}>
                           <Trash2 size={16} />
                         </button>
