@@ -226,11 +226,15 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
 
   // Search & Filter Logs
   const filteredLogs = smsLogs.filter(l => {
-    const matchSearch = l.recipient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        l.recipient_phone.includes(searchTerm) ||
-                        l.message.toLowerCase().includes(searchTerm.toLowerCase());
+    const name = l.recipient_name || 'Member Account';
+    const phone = l.recipient_phone || (l as any).recipient || '';
+    const msg = l.message || '';
+    
+    const matchSearch = name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        phone.includes(searchTerm) ||
+                        msg.toLowerCase().includes(searchTerm.toLowerCase());
     const matchStatus = statusFilter ? l.status === statusFilter : true;
-    const matchDate = dateFilter ? l.timestamp.split('T')[0] === dateFilter : true;
+    const matchDate = dateFilter ? (l.timestamp || '').split('T')[0] === dateFilter : true;
     return matchSearch && matchStatus && matchDate;
   });
 
@@ -568,8 +572,8 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
                     <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                       {new Date(l.timestamp).toLocaleString()}
                     </td>
-                    <td className="bold">{l.recipient_name}</td>
-                    <td>{l.recipient_phone}</td>
+                    <td className="bold">{l.recipient_name || 'Member Account'}</td>
+                    <td>{l.recipient_phone || (l as any).recipient || 'N/A'}</td>
                     <td style={{ maxWidth: '280px', fontSize: '13px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                       "{l.message}"
                     </td>
