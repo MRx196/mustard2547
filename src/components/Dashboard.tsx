@@ -58,19 +58,47 @@ export const Dashboard: React.FC<DashboardProps> = ({
   // Recent Transactions (limit 5)
   const recentTransactions = [...transactions].slice(0, 5);
 
-  // SVG Chart Data - Monthly Savings & Loan distributions (Mock for Jan-Jul)
-  const monthlyTrendData = [
-    { name: 'Jan', savings: 25000, loans: 15000 },
-    { name: 'Feb', savings: 32000, loans: 22000 },
-    { name: 'Mar', savings: 41000, loans: 28000 },
-    { name: 'Apr', savings: 48000, loans: 31000 },
-    { name: 'May', savings: 55000, loans: 32000 },
-    { name: 'Jun', savings: 60000, loans: 34000 },
-    { name: 'Jul', savings: totalSavings, loans: outstandingLoans }
-  ];
+  // 2. SVG Chart Data - Monthly Savings & Loan distributions (Dynamic Past 6 Months)
+  const getPastSixMonths = () => {
+    const list = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const name = d.toLocaleString('default', { month: 'short' });
+      const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      list.push({ name, yearMonth, savings: 0, loans: 0 });
+    }
+    return list;
+  };
 
-  // Find max value to scale chart
-  const maxChartVal = Math.max(...monthlyTrendData.flatMap(d => [d.savings, d.loans])) * 1.15;
+  const monthlyTrendData = getPastSixMonths();
+
+  monthlyTrendData.forEach(item => {
+    const yearMonth = item.yearMonth;
+    const maxDate = `${yearMonth}-31T23:59:59.999Z`;
+
+    const savingsUpToMonth = transactions
+      .filter(t => t.date <= maxDate)
+      .reduce((sum, t) => {
+        if (t.type === 'deposit' || t.type === 'dividend') return sum + t.amount;
+        if (t.type === 'withdrawal') return sum - t.amount;
+        return sum;
+      }, 0);
+
+    const loansUpToMonth = loans
+      .filter(l => l.created_at <= maxDate && l.status !== 'pending' && l.status !== 'rejected')
+      .reduce((sum, l) => {
+        if (l.status === 'repaid' || l.status === 'disbursed' || l.status === 'active') {
+          return sum + l.outstanding_balance;
+        }
+        return sum;
+      }, 0);
+
+    item.savings = Math.max(0, savingsUpToMonth);
+    item.loans = Math.max(0, loansUpToMonth);
+  });
+
+  const maxChartVal = Math.max(...monthlyTrendData.flatMap(d => [d.savings, d.loans])) * 1.15 || 1000;
 
   return (
     <div className="flex flex-col gap-16 w-full">
@@ -94,18 +122,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
           <div className="stat-details">
             <span className="stat-label">Total Savings</span>
-            <span className="stat-value">GHS {totalSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="stat-value">₵ {totalSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
 
         {/* Total Shares */}
-        <div className="stat-card gold-border" onClick={() => onNavigate('shares')} style={{ cursor: 'pointer' }}>
+        <div className="stat-card" onClick={() => onNavigate('shares')} style={{ cursor: 'pointer' }}>
           <div className="stat-icon-wrapper">
             <TrendingUp size={24} />
           </div>
           <div className="stat-details">
             <span className="stat-label">Total Shares</span>
-            <span className="stat-value">GHS {totalShares.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="stat-value">₵ {totalShares.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
 
@@ -116,7 +144,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
           <div className="stat-details">
             <span className="stat-label">Outstanding Loans</span>
-            <span className="stat-value">GHS {outstandingLoans.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="stat-value">₵ {outstandingLoans.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
 
@@ -127,18 +155,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
           <div className="stat-details">
             <span className="stat-label">Monthly Collections</span>
-            <span className="stat-value">GHS {monthlyCollections.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="stat-value">₵ {monthlyCollections.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
 
         {/* Cash Balance */}
-        <div className="stat-card gold-border" onClick={() => onNavigate('accounting')} style={{ cursor: 'pointer' }}>
+        <div className="stat-card" onClick={() => onNavigate('accounting')} style={{ cursor: 'pointer' }}>
           <div className="stat-icon-wrapper">
             <CreditCard size={24} />
           </div>
           <div className="stat-details">
             <span className="stat-label">Cash Balance</span>
-            <span className="stat-value">GHS {totalCashBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="stat-value">₵ {totalCashBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
 
@@ -154,7 +182,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
 
         {/* SMS Sent Today */}
-        <div className="stat-card gold-border" onClick={() => onNavigate('sms')} style={{ cursor: 'pointer' }}>
+        <div className="stat-card" onClick={() => onNavigate('sms')} style={{ cursor: 'pointer' }}>
           <div className="stat-icon-wrapper">
             <Receipt size={24} />
           </div>
@@ -170,7 +198,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Trend Chart */}
         <div className="card">
           <div className="card-title">
-            <span>Savings vs. Loans Trends (GHS)</span>
+            <span>Savings vs. Loans Trends (₵)</span>
             <div className="flex gap-16" style={{ fontSize: '12px' }}>
               <span className="flex align-center gap-8"><span style={{ width: 12, height: 12, background: 'var(--primary)', borderRadius: '2px', display: 'inline-block' }}></span> Savings</span>
               <span className="flex align-center gap-8"><span style={{ width: 12, height: 12, background: 'var(--secondary)', borderRadius: '2px', display: 'inline-block' }}></span> Outstanding Loans</span>
@@ -189,17 +217,17 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <div 
                       className="chart-bar-fill" 
                       style={{ height: `${savingsPct}%` }}
-                      title={`Savings: GHS ${d.savings}`}
+                      title={`Savings: ₵ ${d.savings}`}
                     >
-                      <span className="chart-bar-val">GHS {(d.savings/1000).toFixed(0)}k</span>
+                      <span className="chart-bar-val">₵{d.savings >= 1000 ? `${(d.savings/1000).toFixed(0)}k` : d.savings}</span>
                     </div>
                     {/* Loans Bar */}
                     <div 
                       className="chart-bar-fill secondary-bar" 
                       style={{ height: `${loansPct}%` }}
-                      title={`Loans: GHS ${d.loans}`}
+                      title={`Loans: ₵ ${d.loans}`}
                     >
-                      <span className="chart-bar-val">GHS {(d.loans/1000).toFixed(0)}k</span>
+                      <span className="chart-bar-val">₵{d.loans >= 1000 ? `${(d.loans/1000).toFixed(0)}k` : d.loans}</span>
                     </div>
                   </div>
                   <span className="chart-bar-label">{d.name}</span>
@@ -236,7 +264,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     </div>
                   </div>
                   <span className={`bold ${isPositive ? 'text-success' : 'text-danger'}`}>
-                    {isPositive ? '+' : '-'} GHS {t.amount.toFixed(2)}
+                    {isPositive ? '+' : '-'} ₵{t.amount.toFixed(2)}
                   </span>
                 </div>
               );
@@ -264,7 +292,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div key={idx} className="flex justify-between align-center p-8" style={{ borderBottom: '1px solid var(--border)', fontSize: '13px' }}>
                 <div>
                   <div className="bold">{l.member_name}</div>
-                  <div className="text-muted">GHS {l.principal.toLocaleString()} ({l.term_months} mos)</div>
+                  <div className="text-muted">₵ {l.principal.toLocaleString()} ({l.term_months} mos)</div>
                 </div>
                 <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '11px' }} onClick={() => onNavigate('loans')}>
                   Review
@@ -290,7 +318,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div key={idx} className="flex justify-between align-center p-8" style={{ borderBottom: '1px solid var(--border)', fontSize: '13px' }}>
                 <div>
                   <div className="bold">{l.member_name}</div>
-                  <div className="text-danger">GHS {l.outstanding_balance.toLocaleString()} outstanding</div>
+                  <div className="text-danger">₵ {l.outstanding_balance.toLocaleString()} outstanding</div>
                 </div>
                 <button className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '11px', color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => onNavigate('sms')}>
                   SMS Notice

@@ -327,19 +327,18 @@ a:hover {
 .card {
   background-color: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 24px;
-  box-shadow: var(--shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.2s ease;
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow);
 }
 
 .card-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   margin-bottom: 20px;
   display: flex;
@@ -360,7 +359,7 @@ a:hover {
 .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 20px;
   display: flex;
   align-items: center;
@@ -415,7 +414,7 @@ a:hover {
   justify-content: center;
   gap: 8px;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 6px;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
@@ -427,25 +426,23 @@ a:hover {
 .btn-primary {
   background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
   color: white;
-  box-shadow: 0 4px 12px rgba(15, 44, 89, 0.2);
+  box-shadow: 0 2px 6px rgba(15, 44, 89, 0.15);
 }
 
 .btn-primary:hover {
   background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(15, 44, 89, 0.3);
+  box-shadow: 0 4px 10px rgba(15, 44, 89, 0.2);
 }
 
 .btn-secondary {
   background: linear-gradient(135deg, var(--secondary) 0%, var(--secondary-dark) 100%);
   color: white;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.15);
 }
 
 .btn-secondary:hover {
   background: linear-gradient(135deg, var(--secondary-light) 0%, var(--secondary) 100%);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
 }
 
 .btn-outline {
