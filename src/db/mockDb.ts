@@ -201,7 +201,8 @@ export const mockDb = {
     localStorage.setItem('audit_logs', JSON.stringify(logs.slice(0, 500)));
 
     // Sync to Supabase
-    await supabase.from('audit_logs').insert(newLog);
+    const { error } = await supabase.from('audit_logs').insert(newLog);
+    if (error) console.error("Audit log insertion failed:", error.message);
   },
 
   // READERS
@@ -289,7 +290,8 @@ export const mockDb = {
         localStorage.setItem('congregations', JSON.stringify(list));
         await mockDb.logAudit(activeOperator, 'Edit Congregation', 'Congregations', id, prev, name);
         
-        await supabase.from('congregations').update({ name }).eq('id', id);
+        const { error } = await supabase.from('congregations').update({ name }).eq('id', id);
+        if (error) throw new Error(`Supabase Error: ${error.message} (Code: ${error.code})`);
       }
     } else {
       const newC: Congregation = {
@@ -301,7 +303,8 @@ export const mockDb = {
       localStorage.setItem('congregations', JSON.stringify(list));
       await mockDb.logAudit(activeOperator, 'Add Congregation', 'Congregations', newC.id, 'N/A', name);
       
-      await supabase.from('congregations').insert(newC);
+      const { error } = await supabase.from('congregations').insert(newC);
+      if (error) throw new Error(`Supabase Error: ${error.message} (Code: ${error.code})`);
     }
     await mockDb.triggerSync();
   },
@@ -317,7 +320,8 @@ export const mockDb = {
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
     await mockDb.logAudit(activeOperator, 'Delete Congregation', 'Congregations', id, match.name, 'Deleted');
     
-    await supabase.from('congregations').delete().eq('id', id);
+    const { error } = await supabase.from('congregations').delete().eq('id', id);
+    if (error) throw new Error(`Supabase Error: ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -354,9 +358,12 @@ export const mockDb = {
     await mockDb.logAudit(operator, 'Register Member', 'Members', mId, 'N/A', JSON.stringify(newM));
 
     // Sync to Supabase
-    await supabase.from('members').insert(newM);
+    const { error: mErr } = await supabase.from('members').insert(newM);
+    if (mErr) throw new Error(`Supabase Error (Members): ${mErr.message} (Code: ${mErr.code})`);
+
     if (beneficiariesList.length > 0) {
-      await supabase.from('beneficiaries').insert(beneficiariesList);
+      const { error: bErr } = await supabase.from('beneficiaries').insert(beneficiariesList);
+      if (bErr) throw new Error(`Supabase Error (Beneficiaries): ${bErr.message} (Code: ${bErr.code})`);
     }
     await mockDb.triggerSync();
   },
@@ -390,10 +397,15 @@ export const mockDb = {
     await mockDb.logAudit(operator, 'Update Member Details', 'Members', id, JSON.stringify(prev), JSON.stringify(members[idx]));
 
     // Sync to Supabase
-    await supabase.from('members').update(memberData).eq('id', id);
-    await supabase.from('beneficiaries').delete().eq('member_id', id);
+    const { error: mErr } = await supabase.from('members').update(memberData).eq('id', id);
+    if (mErr) throw new Error(`Supabase Error (Members): ${mErr.message} (Code: ${mErr.code})`);
+
+    const { error: delErr } = await supabase.from('beneficiaries').delete().eq('member_id', id);
+    if (delErr) throw new Error(`Supabase Error (Delete Beneficiaries): ${delErr.message} (Code: ${delErr.code})`);
+
     if (newBens.length > 0) {
-      await supabase.from('beneficiaries').insert(newBens);
+      const { error: insErr } = await supabase.from('beneficiaries').insert(newBens);
+      if (insErr) throw new Error(`Supabase Error (Beneficiaries): ${insErr.message} (Code: ${insErr.code})`);
     }
     await mockDb.triggerSync();
   },
@@ -468,8 +480,12 @@ export const mockDb = {
     await mockDb.logAudit(operator, `Post Transaction (${txData.type})`, 'Savings', txId, 'N/A', JSON.stringify(newTx));
 
     // Sync to Supabase
-    await supabase.from('transactions').insert(newTx);
-    await supabase.from('journal_entries').insert(newEntry);
+    const { error: txErr } = await supabase.from('transactions').insert(newTx);
+    if (txErr) throw new Error(`Supabase Error (Transactions): ${txErr.message} (Code: ${txErr.code})`);
+
+    const { error: jeErr } = await supabase.from('journal_entries').insert(newEntry);
+    if (jeErr) throw new Error(`Supabase Error (Journal Entries): ${jeErr.message} (Code: ${jeErr.code})`);
+
     await mockDb.triggerSync();
   },
 
@@ -503,7 +519,8 @@ export const mockDb = {
     await mockDb.logAudit(operator, 'Apply Loan', 'Loans', lId, 'N/A', JSON.stringify(newLoan));
 
     // Sync to Supabase
-    await supabase.from('loans').insert(newLoan);
+    const { error } = await supabase.from('loans').insert(newLoan);
+    if (error) throw new Error(`Supabase Error (Loans): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -551,14 +568,18 @@ export const mockDb = {
       txs.unshift(tx);
       localStorage.setItem('transactions', JSON.stringify(txs));
 
-      await supabase.from('journal_entries').insert(newEntry);
-      await supabase.from('transactions').insert(tx);
+      const { error: jeErr } = await supabase.from('journal_entries').insert(newEntry);
+      if (jeErr) throw new Error(`Supabase Error (Journal Entries): ${jeErr.message} (Code: ${jeErr.code})`);
+
+      const { error: txErr } = await supabase.from('transactions').insert(tx);
+      if (txErr) throw new Error(`Supabase Error (Transactions): ${txErr.message} (Code: ${txErr.code})`);
     }
 
     await mockDb.logAudit(operator, `Update Loan Status to ${status}`, 'Loans', id, prev, status);
 
     // Sync to Supabase
-    await supabase.from('loans').update({ status }).eq('id', id);
+    const { error } = await supabase.from('loans').update({ status }).eq('id', id);
+    if (error) throw new Error(`Supabase Error (Loans): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -620,9 +641,15 @@ export const mockDb = {
     await mockDb.logAudit(operator, 'Post Loan Repayment', 'Loans', id, prevBal.toString(), newBal.toString());
 
     // Sync to Supabase
-    await supabase.from('loans').update({ outstanding_balance: newBal, status: loans[idx].status }).eq('id', id);
-    await supabase.from('journal_entries').insert(newEntry);
-    await supabase.from('transactions').insert(tx);
+    const { error: lErr } = await supabase.from('loans').update({ outstanding_balance: newBal, status: loans[idx].status }).eq('id', id);
+    if (lErr) throw new Error(`Supabase Error (Loans): ${lErr.message} (Code: ${lErr.code})`);
+
+    const { error: jeErr } = await supabase.from('journal_entries').insert(newEntry);
+    if (jeErr) throw new Error(`Supabase Error (Journal Entries): ${jeErr.message} (Code: ${jeErr.code})`);
+
+    const { error: txErr } = await supabase.from('transactions').insert(tx);
+    if (txErr) throw new Error(`Supabase Error (Transactions): ${txErr.message} (Code: ${txErr.code})`);
+
     await mockDb.triggerSync();
   },
 
@@ -643,7 +670,8 @@ export const mockDb = {
     await mockDb.logAudit(operator, 'Map Loan Guarantor', 'Loans', newG.id, 'N/A', JSON.stringify(newG));
 
     // Sync to Supabase
-    await supabase.from('guarantors').insert(newG);
+    const { error } = await supabase.from('guarantors').insert(newG);
+    if (error) throw new Error(`Supabase Error (Guarantors): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -701,9 +729,11 @@ export const mockDb = {
 
     // Sync to Supabase
     if (newTxs.length > 0) {
-      await supabase.from('transactions').insert(newTxs);
+      const { error: txErr } = await supabase.from('transactions').insert(newTxs);
+      if (txErr) throw new Error(`Supabase Error (Transactions): ${txErr.message} (Code: ${txErr.code})`);
     }
-    await supabase.from('journal_entries').insert(newEntry);
+    const { error: jeErr } = await supabase.from('journal_entries').insert(newEntry);
+    if (jeErr) throw new Error(`Supabase Error (Journal Entries): ${jeErr.message} (Code: ${jeErr.code})`);
     await mockDb.triggerSync();
   },
 
@@ -727,7 +757,8 @@ export const mockDb = {
     await mockDb.logAudit(operator, 'Post Manual Journal Voucher', 'Accounting', entryId, 'N/A', JSON.stringify(newEntry));
 
     // Sync to Supabase
-    await supabase.from('journal_entries').insert(newEntry);
+    const { error } = await supabase.from('journal_entries').insert(newEntry);
+    if (error) throw new Error(`Supabase Error (Journal Entries): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -761,7 +792,8 @@ export const mockDb = {
     await mockDb.logAudit(operator, `Log MoMo Transaction (${txData.type})`, 'MoMo', txId, 'N/A', JSON.stringify(newMoMo));
 
     // Sync to Supabase
-    await supabase.from('momo_transactions').insert(newMoMo);
+    const { error } = await supabase.from('momo_transactions').insert(newMoMo);
+    if (error) throw new Error(`Supabase Error (MoMo Transactions): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -777,7 +809,8 @@ export const mockDb = {
         localStorage.setItem('sms_templates', JSON.stringify(list));
         await mockDb.logAudit(activeOperator, 'Modify SMS Template', 'SMS', id, 'Template Body', template.body);
         
-        await supabase.from('sms_templates').update(template).eq('id', id);
+        const { error } = await supabase.from('sms_templates').update(template).eq('id', id);
+        if (error) throw new Error(`Supabase Error (SMS Templates): ${error.message} (Code: ${error.code})`);
       }
     } else {
       const newT: SMSTemplate = {
@@ -788,7 +821,8 @@ export const mockDb = {
       localStorage.setItem('sms_templates', JSON.stringify(list));
       await mockDb.logAudit(activeOperator, 'Create SMS Template', 'SMS', newT.id, 'N/A', template.body);
       
-      await supabase.from('sms_templates').insert(newT);
+      const { error } = await supabase.from('sms_templates').insert(newT);
+      if (error) throw new Error(`Supabase Error (SMS Templates): ${error.message} (Code: ${error.code})`);
     }
     await mockDb.triggerSync();
   },
@@ -826,7 +860,8 @@ export const mockDb = {
 
     await mockDb.logAudit(operator, 'Top Up SMS Gateway Wallet', 'SMS', 'SMS Wallet', current.toString(), next.toString());
 
-    await supabase.from('journal_entries').insert(newEntry);
+    const { error } = await supabase.from('journal_entries').insert(newEntry);
+    if (error) throw new Error(`Supabase Error (Journal Entries): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -836,7 +871,8 @@ export const mockDb = {
     localStorage.setItem('sms_logs', JSON.stringify(filtered));
     await mockDb.logAudit(operator, 'Delete SMS Delivery Log', 'SMS', id, 'Log Record', 'Deleted');
 
-    await supabase.from('sms_logs').delete().eq('id', id);
+    const { error } = await supabase.from('sms_logs').delete().eq('id', id);
+    if (error) throw new Error(`Supabase Error (SMS Logs): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -863,7 +899,8 @@ export const mockDb = {
       localStorage.setItem('staff_users', JSON.stringify(list));
       await mockDb.logAudit(activeOperator, 'Change Staff User Details', 'UserRoles', profile.email, prev, JSON.stringify(list[idx]));
       
-      await supabase.from('staff_users').update(profile).eq('email', profile.email);
+      const { error } = await supabase.from('staff_users').update(profile).eq('email', profile.email);
+      if (error) throw new Error(`Supabase Error (Staff Users): ${error.message} (Code: ${error.code})`);
     } else {
       const newU: StaffUser = {
         email: profile.email,
@@ -880,7 +917,8 @@ export const mockDb = {
       localStorage.setItem('staff_users', JSON.stringify(list));
       await mockDb.logAudit(activeOperator, 'Assign Staff User Role', 'UserRoles', profile.email, 'N/A', JSON.stringify(newU));
       
-      await supabase.from('staff_users').insert(newU);
+      const { error } = await supabase.from('staff_users').insert(newU);
+      if (error) throw new Error(`Supabase Error (Staff Users): ${error.message} (Code: ${error.code})`);
     }
     await mockDb.triggerSync();
   },
@@ -896,7 +934,8 @@ export const mockDb = {
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
     await mockDb.logAudit(activeOperator, 'Revoke Staff User Access', 'UserRoles', email, match.role, 'Revoked');
 
-    await supabase.from('staff_users').delete().eq('email', email);
+    const { error } = await supabase.from('staff_users').delete().eq('email', email);
+    if (error) throw new Error(`Supabase Error (Staff Users): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -977,7 +1016,8 @@ export const mockDb = {
     await mockDb.logAudit(operator, 'Send SMS Notification', 'SMS', logId, 'Wallet Deduction: 0.10 GHS', `Message: "${message}"`);
 
     // Sync to Supabase
-    await supabase.from('sms_logs').insert(newLog);
+    const { error } = await supabase.from('sms_logs').insert(newLog);
+    if (error) throw new Error(`Supabase Error (SMS Logs): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
     return newLog;
   },
@@ -988,7 +1028,8 @@ export const mockDb = {
     localStorage.setItem('sms_templates', JSON.stringify(filtered));
     await mockDb.logAudit(operator, 'Delete SMS Template', 'SMS', id, 'Template', 'Deleted');
 
-    await supabase.from('sms_templates').delete().eq('id', id);
+    const { error } = await supabase.from('sms_templates').delete().eq('id', id);
+    if (error) throw new Error(`Supabase Error (SMS Templates): ${error.message} (Code: ${error.code})`);
     await mockDb.triggerSync();
   },
 
@@ -1019,7 +1060,8 @@ export const mockDb = {
       localStorage.setItem('chart_of_accounts', JSON.stringify(coa));
 
       // Sync to Supabase
-      await supabase.from('chart_of_accounts').update({ balance }).eq('account_no', accountNo);
+      const { error } = await supabase.from('chart_of_accounts').update({ balance }).eq('account_no', accountNo);
+      if (error) throw new Error(`Supabase Error (Chart of Accounts): ${error.message} (Code: ${error.code})`);
     }
   },
 

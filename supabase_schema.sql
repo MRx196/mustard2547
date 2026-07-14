@@ -189,3 +189,23 @@ CREATE TABLE momo_transactions (
     timestamp TEXT NOT NULL,
     reference TEXT UNIQUE NOT NULL
 );
+
+-- Disable Row Level Security (RLS) on all tables to ensure clean anonymous client connections
+ALTER TABLE congregations DISABLE ROW LEVEL SECURITY;
+ALTER TABLE staff_users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE members DISABLE ROW LEVEL SECURITY;
+ALTER TABLE beneficiaries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE loans DISABLE ROW LEVEL SECURITY;
+ALTER TABLE guarantors DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sms_templates DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sms_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE chart_of_accounts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
+ALTER TABLE momo_transactions DISABLE ROW LEVEL SECURITY;
+
+-- Seed Default Super Administrator
+INSERT INTO staff_users (email, full_name, role, status, last_signin, created_at, username, phone_number, auth_user_id)
+VALUES ('mrxmail20@gmail.com', 'Super Admin', 'Super Administrator', 'Active', 'N/A', '2026-07-14T16:27:39Z', 'superadmin', '+233240001100', '')
+ON CONFLICT (email) DO NOTHING;

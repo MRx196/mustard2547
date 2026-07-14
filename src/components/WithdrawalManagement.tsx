@@ -43,7 +43,7 @@ export const WithdrawalManagement: React.FC<WithdrawalManagementProps> = ({
     setNotes('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -63,7 +63,7 @@ export const WithdrawalManagement: React.FC<WithdrawalManagementProps> = ({
     }
 
     try {
-      onPostTransaction({
+      await onPostTransaction({
         member_id: selectedMember.id,
         type: 'withdrawal',
         amount: numAmount,

@@ -81,7 +81,7 @@ export const SharesManagement: React.FC<SharesManagementProps> = ({
     setShowBuyModal(true);
   };
 
-  const handleBuySubmit = (e: React.FormEvent) => {
+  const handleBuySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -98,7 +98,7 @@ export const SharesManagement: React.FC<SharesManagementProps> = ({
     }
 
     try {
-      onPostTransaction({
+      await onPostTransaction({
         member_id: selectedMemberId,
         type: 'share_purchase',
         amount: numAmount,
@@ -118,7 +118,7 @@ export const SharesManagement: React.FC<SharesManagementProps> = ({
     }
   };
 
-  const handleDividendSubmit = (e: React.FormEvent) => {
+  const handleDividendSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -130,7 +130,7 @@ export const SharesManagement: React.FC<SharesManagementProps> = ({
     }
 
     try {
-      onDistributeDividends(pct);
+      await onDistributeDividends(pct);
       setSuccessMsg(`Dividend of ${pct}% successfully distributed to all member savings!`);
       setTimeout(() => {
         setActiveTab('balances');

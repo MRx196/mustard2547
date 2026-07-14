@@ -43,7 +43,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
     setNotes('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -57,7 +57,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
     }
 
     try {
-      onPostTransaction({
+      await onPostTransaction({
         member_id: selectedMember.id,
         type: 'deposit',
         amount: numAmount,

@@ -4,12 +4,14 @@ const DEFAULT_URL = 'https://doqxliqtbwcciryegkjm.supabase.co';
 const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRvcXhsaXF0YndjY2lyeWVna2ptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5ODYyNjgsImV4cCI6MjA5OTU2MjI2OH0.650paBULVIHoEdDngrnqo-dG6-a3FApcy-h8aOp23_8';
 
 export const getSupabaseConfig = () => {
+  const envUrl = (import.meta.env as any)?.VITE_SUPABASE_URL;
+  const envKey = (import.meta.env as any)?.VITE_SUPABASE_ANON_KEY;
   const storedUrl = localStorage.getItem('supabase_url');
   const storedKey = localStorage.getItem('supabase_anon_key');
   
   return {
-    url: storedUrl || DEFAULT_URL,
-    anonKey: storedKey || DEFAULT_ANON_KEY,
+    url: storedUrl || envUrl || DEFAULT_URL,
+    anonKey: storedKey || envKey || DEFAULT_ANON_KEY,
     isCustom: !!(storedUrl || storedKey)
   };
 };

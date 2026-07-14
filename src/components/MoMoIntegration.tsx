@@ -71,7 +71,7 @@ export const MoMoIntegration: React.FC<MoMoIntegrationProps> = ({
     setShowMemberDropdown(false);
   };
 
-  const handleRecordSubmit = (e: React.FormEvent) => {
+  const handleRecordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -88,7 +88,7 @@ export const MoMoIntegration: React.FC<MoMoIntegrationProps> = ({
     }
 
     try {
-      onCreateTransaction({
+      await onCreateTransaction({
         direction,
         network,
         member_id: selectedMemberId || undefined,

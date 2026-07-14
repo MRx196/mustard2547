@@ -119,7 +119,7 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
       }
 
       // 2. Save/Update Profile in Users DB table
-      onAssignRole({
+      await onAssignRole({
         email,
         role,
         full_name: fullName,
@@ -142,7 +142,7 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
     }
   };
 
-  const handleRevoke = (email: string) => {
+  const handleRevoke = async (email: string) => {
     const isSuperAdmin = userRole === 'Super Administrator' || userRole === 'Super Admin';
     if (!isSuperAdmin) {
       alert('Action Unauthorized: Only Super Administrators can revoke roles.');
@@ -150,7 +150,11 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
     }
 
     if (window.confirm(`Revoke and remove all access rights for ${email}?`)) {
-      onRevokeRole(email);
+      try {
+        await onRevokeRole(email);
+      } catch (err: any) {
+        alert(err.message || 'Failed to revoke user role.');
+      }
     }
   };
 

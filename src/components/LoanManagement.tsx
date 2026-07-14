@@ -68,7 +68,7 @@ export const LoanManagement: React.FC<LoanManagementProps> = ({
     setShowApplyModal(true);
   };
 
-  const handleApplySubmit = (e: React.FormEvent) => {
+  const handleApplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -90,24 +90,28 @@ export const LoanManagement: React.FC<LoanManagementProps> = ({
     const member = members.find(m => m.id === selectedMemberId);
     if (!member) return;
 
-    onApplyLoan({
-      member_id: selectedMemberId,
-      member_name: member.full_name,
-      principal: principalVal,
-      interest_rate: interestVal,
-      term_months: termVal,
-      purpose,
-      collateral: collateral || 'None'
-    });
+    try {
+      await onApplyLoan({
+        member_id: selectedMemberId,
+        member_name: member.full_name,
+        principal: principalVal,
+        interest_rate: interestVal,
+        term_months: termVal,
+        purpose,
+        collateral: collateral || 'None'
+      });
 
-    setSuccessMsg('Loan application submitted successfully!');
-    setTimeout(() => {
-      setShowApplyModal(false);
-      setSuccessMsg('');
-    }, 1200);
+      setSuccessMsg('Loan application submitted successfully!');
+      setTimeout(() => {
+        setShowApplyModal(false);
+        setSuccessMsg('');
+      }, 1200);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Loan application failed.');
+    }
   };
 
-  const handleRepaySubmit = (e: React.FormEvent) => {
+  const handleRepaySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -125,14 +129,26 @@ export const LoanManagement: React.FC<LoanManagementProps> = ({
       return;
     }
 
-    onRepayLoan(showRepayModal.id, amountVal);
-    setSuccessMsg('Loan repayment posted successfully!');
-    setRepayAmount('');
+    try {
+      await onRepayLoan(showRepayModal.id, amountVal);
+      setSuccessMsg('Loan repayment posted successfully!');
+      setRepayAmount('');
 
-    setTimeout(() => {
-      setShowRepayModal(null);
-      setSuccessMsg('');
-    }, 1200);
+      setTimeout(() => {
+        setShowRepayModal(null);
+        setSuccessMsg('');
+      }, 1200);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Loan repayment failed.');
+    }
+  };
+
+  const handleUpdateStatus = async (id: string, status: 'approved' | 'rejected' | 'disbursed') => {
+    try {
+      await onUpdateStatus(id, status);
+    } catch (err: any) {
+      alert(err.message || 'Failed to update loan status.');
+    }
   };
 
   const generateAmortization = (loan: Loan) => {
@@ -246,16 +262,16 @@ export const LoanManagement: React.FC<LoanManagementProps> = ({
                       </button>
                       {l.status === 'pending' && canApprove && (
                         <>
-                          <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '12px', background: 'var(--success)' }} onClick={() => onUpdateStatus(l.id, 'approved')}>
+                          <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '12px', background: 'var(--success)' }} onClick={() => handleUpdateStatus(l.id, 'approved')}>
                             <Check size={14} /> Approve
                           </button>
-                          <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => onUpdateStatus(l.id, 'rejected')}>
+                          <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => handleUpdateStatus(l.id, 'rejected')}>
                             <X size={14} /> Reject
                           </button>
                         </>
                       )}
                       {l.status === 'approved' && canApprove && (
-                        <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => onUpdateStatus(l.id, 'disbursed')}>
+                        <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => handleUpdateStatus(l.id, 'disbursed')}>
                           Disburse
                         </button>
                       )}

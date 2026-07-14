@@ -124,7 +124,7 @@ export const AccountingFinance: React.FC<AccountingFinanceProps> = ({
     a.account_no.toString().includes(searchTerm)
   );
 
-  const handleJournalSubmit = (e: React.FormEvent) => {
+  const handleJournalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -141,7 +141,7 @@ export const AccountingFinance: React.FC<AccountingFinanceProps> = ({
     }
 
     try {
-      onPostJournalEntry({
+      await onPostJournalEntry({
         description: `${jeDescription.trim()}${jeReference ? ' (Ref: ' + jeReference + ')' : ''}`,
         debits: [{ account_no: debitAccount, amount: amt }],
         credits: [{ account_no: creditAccount, amount: amt }]

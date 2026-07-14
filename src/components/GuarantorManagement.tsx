@@ -65,7 +65,7 @@ export const GuarantorManagement: React.FC<GuarantorManagementProps> = ({
     setShowMemberDropdown(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -94,22 +94,26 @@ export const GuarantorManagement: React.FC<GuarantorManagementProps> = ({
       return;
     }
 
-    onAddGuarantor({
-      loan_id: selectedLoanId,
-      member_id: selectedMemberId || undefined,
-      full_name: fullName,
-      phone_number: phoneNumber,
-      relationship,
-      amount: numAmount
-    });
+    try {
+      await onAddGuarantor({
+        loan_id: selectedLoanId,
+        member_id: selectedMemberId || undefined,
+        full_name: fullName,
+        phone_number: phoneNumber,
+        relationship,
+        amount: numAmount
+      });
 
-    setSuccessMsg('Guarantor linked successfully!');
-    handleResetForm();
+      setSuccessMsg('Guarantor linked successfully!');
+      handleResetForm();
 
-    setTimeout(() => {
-      setShowAddModal(false);
-      setSuccessMsg('');
-    }, 1200);
+      setTimeout(() => {
+        setShowAddModal(false);
+        setSuccessMsg('');
+      }, 1200);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to map guarantor.');
+    }
   };
 
   const isReadOnly = userRole === 'Member';

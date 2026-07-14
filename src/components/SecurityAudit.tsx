@@ -27,14 +27,18 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({
     return matchSearch && matchModule;
   });
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (userRole !== 'Super Administrator' && userRole !== 'Super Admin') {
       alert('Action Unauthorized: Only Super Administrators can clear the database.');
       return;
     }
-    onResetDb();
-    setShowConfirmReset(false);
-    alert('Mock local database successfully reset to clean seed settings!');
+    try {
+      await onResetDb();
+      setShowConfirmReset(false);
+      alert('Production database successfully cleared & system settings initialized!');
+    } catch (err: any) {
+      alert(err.message || 'Database reset failed.');
+    }
   };
 
   const isSuperAdmin = userRole === 'Super Administrator' || userRole === 'Super Admin';

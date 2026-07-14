@@ -131,7 +131,7 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
     setShowPrintModal(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -167,10 +167,10 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
       };
 
       if (showEditModal && editingId) {
-        onEditMember(editingId, pkg, activeBeneficiaries);
+        await onEditMember(editingId, pkg, activeBeneficiaries);
         setSuccessMsg('Member profile updated successfully!');
       } else {
-        onAddMember(pkg, activeBeneficiaries);
+        await onAddMember(pkg, activeBeneficiaries);
         setSuccessMsg('Member registered successfully!');
       }
 

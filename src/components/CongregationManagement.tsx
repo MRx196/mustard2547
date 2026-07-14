@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Congregation } from '../db/supabase';
-import { Plus, Edit, Trash2, Check } from 'lucide-react';
+import { Plus, Edit, Trash2, Check, AlertCircle } from 'lucide-react';
 
 interface CongregationManagementProps {
   congregations: Congregation[];
@@ -32,23 +32,35 @@ export const CongregationManagement: React.FC<CongregationManagementProps> = ({
     setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!congregationName.trim()) return;
+    setErrorMsg('');
+    setSuccessMsg('');
 
-    onSaveCongregation(congregationName.trim(), editingId);
-    setSuccessMsg(editingId ? 'Congregation updated!' : 'Congregation added!');
-    setCongregationName('');
-    
-    setTimeout(() => {
-      setShowModal(false);
-      setSuccessMsg('');
-    }, 1200);
+    try {
+      await onSaveCongregation(congregationName.trim(), editingId);
+      setSuccessMsg(editingId ? 'Congregation updated!' : 'Congregation added!');
+      setCongregationName('');
+      
+      setTimeout(() => {
+        setShowModal(false);
+        setSuccessMsg('');
+      }, 1200);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to save congregation.');
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this congregation? Members registered under this congregation will keep their record but the congregation selection option will be removed.')) {
-      onDeleteCongregation(id);
+      try {
+        await onDeleteCongregation(id);
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete congregation.');
+      }
     }
   };
 
@@ -122,6 +134,12 @@ export const CongregationManagement: React.FC<CongregationManagementProps> = ({
                 {successMsg && (
                   <div className="alert alert-success" style={{ padding: '10px' }}>
                     <Check size={16} /> <span>{successMsg}</span>
+                  </div>
+                )}
+
+                {errorMsg && (
+                  <div className="alert alert-danger" style={{ padding: '10px' }}>
+                    <AlertCircle size={16} /> <span>{errorMsg}</span>
                   </div>
                 )}
 
