@@ -190,19 +190,72 @@ CREATE TABLE momo_transactions (
     reference TEXT UNIQUE NOT NULL
 );
 
--- Disable Row Level Security (RLS) on all tables to ensure clean anonymous client connections
+-- Double-layered RLS bypass: Enable RLS, create permissive public policies for anon reads and writes, then disable RLS.
+-- This ensures that under both states (RLS enabled or RLS disabled), REST client operations succeed.
+
+ALTER TABLE congregations ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all congregations" ON congregations;
+CREATE POLICY "Permit all congregations" ON congregations FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE congregations DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE staff_users ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all staff_users" ON staff_users;
+CREATE POLICY "Permit all staff_users" ON staff_users FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE staff_users DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE members ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all members" ON members;
+CREATE POLICY "Permit all members" ON members FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE members DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE beneficiaries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all beneficiaries" ON beneficiaries;
+CREATE POLICY "Permit all beneficiaries" ON beneficiaries FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE beneficiaries DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all transactions" ON transactions;
+CREATE POLICY "Permit all transactions" ON transactions FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all loans" ON loans;
+CREATE POLICY "Permit all loans" ON loans FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE loans DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE guarantors ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all guarantors" ON guarantors;
+CREATE POLICY "Permit all guarantors" ON guarantors FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE guarantors DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE sms_templates ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all sms_templates" ON sms_templates;
+CREATE POLICY "Permit all sms_templates" ON sms_templates FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE sms_templates DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE sms_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all sms_logs" ON sms_logs;
+CREATE POLICY "Permit all sms_logs" ON sms_logs FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE sms_logs DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all audit_logs" ON audit_logs;
+CREATE POLICY "Permit all audit_logs" ON audit_logs FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE audit_logs DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all chart_of_accounts" ON chart_of_accounts;
+CREATE POLICY "Permit all chart_of_accounts" ON chart_of_accounts FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE chart_of_accounts DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all journal_entries" ON journal_entries;
+CREATE POLICY "Permit all journal_entries" ON journal_entries FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
+
+ALTER TABLE momo_transactions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Permit all momo_transactions" ON momo_transactions;
+CREATE POLICY "Permit all momo_transactions" ON momo_transactions FOR ALL TO public USING (true) WITH CHECK (true);
 ALTER TABLE momo_transactions DISABLE ROW LEVEL SECURITY;
 
 -- Seed Default Super Administrator
