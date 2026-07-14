@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { mockDb } from './db/mockDb';
 import type { Member, Beneficiary, Transaction, Loan, SMSLog, SMSTemplate, AuditLog, AccountCOA, JournalEntry, MobileMoneyTransaction, Congregation, Guarantor, StaffUser } from './db/supabase';
+import { keepAliveService } from './services/keepAlive';
 
 // Components
 import { Login } from './components/Login';
@@ -51,6 +52,9 @@ function App() {
   // Initialize DB and fetch local session
   useEffect(() => {
     mockDb.initialize();
+    
+    // Start database keep-alive background ping service
+    keepAliveService.start();
     
     // Recover user session
     const stored = localStorage.getItem('current_user');
