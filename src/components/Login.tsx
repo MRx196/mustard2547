@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../db/supabase';
 import { mockDb } from '../db/mockDb';
-import { KeyRound, Mail, Eye, EyeOff, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Landmark, AlertCircle, ShieldCheck } from 'lucide-react';
 
 interface LoginProps {
   onLoginSuccess: (userProfile: any) => void;
@@ -10,7 +10,6 @@ interface LoginProps {
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -25,16 +24,15 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     const pass = password;
 
     if (!input || !pass) {
-      setErrorMsg('Please enter both username/email and password.');
+      setErrorMsg('Please enter both email and password.');
       setLoading(false);
       return;
     }
 
-    // 1. Resolve email if Username was entered
+    // Resolve email if Username/Email was entered
     let email = input;
     const staffList = mockDb.getStaffUsers();
     
-    // Find matching profile by email or username
     const profileMatch = staffList.find(
       u => u.email.toLowerCase() === input.toLowerCase() ||
            (u.username && u.username.toLowerCase() === input.toLowerCase())
@@ -45,49 +43,66 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
 
     try {
-      // 2. Attempt Authentication with Supabase
+      // 1. Attempt Authentication with Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password: pass
       });
 
       if (error) {
-        // 3. Fallback bypass: check local storage matching seed accounts for offline testing
-        if (profileMatch && (
-          // Allow login for seeded users with local pass bypass
-          (email === 'admin@mustardseed.org' && pass === 'Password123') ||
+        // 2. Local Fallback authentication matching seed accounts
+        if (
+          (email === 'mrxmail20@gmail.com' && pass === 'Admin@12!') ||
           (email === 'accountant@mustardseed.org' && pass === 'Password123') ||
           (email === 'loans@mustardseed.org' && pass === 'Password123') ||
           (email === 'momo@mustardseed.org' && pass === 'Password123') ||
           (email === 'auditor@mustardseed.org' && pass === 'Password123')
-        )) {
-          // Update last sign-in
-          const updatedProfiles = staffList.map(u => {
-            if (u.email.toLowerCase() === email.toLowerCase()) {
-              return { ...u, last_signin: new Date().toISOString() };
-            }
-            return u;
-          });
-          localStorage.setItem('staff_users', JSON.stringify(updatedProfiles));
-          
-          setSuccessMsg('Sign in successful (Local Bypass Authentication)! Redirecting...');
-          setTimeout(() => {
-            onLoginSuccess(profileMatch);
-          }, 1200);
-          return;
+        ) {
+          // If profileMatch exists, use it, otherwise create one for mrxmail20@gmail.com
+          let matched = profileMatch;
+          if (!matched && email === 'mrxmail20@gmail.com') {
+            matched = {
+              email: 'mrxmail20@gmail.com',
+              full_name: 'Super Admin',
+              role: 'Super Administrator',
+              status: 'Active',
+              last_signin: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              username: 'superadmin',
+              phone_number: '+233240001100'
+            };
+            const currentStaff = mockDb.getStaffUsers();
+            currentStaff.push(matched);
+            localStorage.setItem('staff_users', JSON.stringify(currentStaff));
+          }
+
+          if (matched) {
+            // Update last sign-in
+            const updated = staffList.map(u => {
+              if (u.email.toLowerCase() === email.toLowerCase()) {
+                return { ...u, last_signin: new Date().toISOString() };
+              }
+              return u;
+            });
+            localStorage.setItem('staff_users', JSON.stringify(updated));
+
+            setSuccessMsg('Sign in successful (Local Bypass)! Redirecting...');
+            setTimeout(() => {
+              onLoginSuccess(matched);
+            }, 1000);
+            return;
+          }
         }
 
-        // Return the actual Supabase error if local bypass didn't match
         setErrorMsg(error.message || 'Authentication failed. Please verify credentials.');
       } else if (data.user) {
-        // Supabase Auth succeeded! Look up user profile
+        // Supabase Auth succeeded!
         let userProfile = profileMatch;
         if (!userProfile) {
-          // If profile doesn't exist locally, create a default Administrator profile
           userProfile = {
             email: data.user.email || email,
-            full_name: data.user.user_metadata?.full_name || 'Staff User',
-            role: data.user.user_metadata?.role || 'Administrator',
+            full_name: data.user.user_metadata?.full_name || 'Super Admin',
+            role: data.user.user_metadata?.role || 'Super Administrator',
             status: 'Active',
             last_signin: new Date().toISOString(),
             created_at: new Date().toISOString(),
@@ -98,7 +113,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           currentStaff.push(userProfile);
           localStorage.setItem('staff_users', JSON.stringify(currentStaff));
         } else {
-          // Update profile with auth_user_id and last sign-in
           const updated = staffList.map(u => {
             if (u.email.toLowerCase() === email.toLowerCase()) {
               return { ...u, auth_user_id: data.user.id, last_signin: new Date().toISOString() };
@@ -108,10 +122,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           localStorage.setItem('staff_users', JSON.stringify(updated));
         }
 
-        setSuccessMsg('Sign in successful (Authenticated via Supabase)! Redirecting...');
+        setSuccessMsg('Sign in successful! Redirecting...');
         setTimeout(() => {
           onLoginSuccess(userProfile);
-        }, 1200);
+        }, 1000);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'An unexpected authentication error occurred.');
@@ -120,134 +134,98 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!identifier.trim()) {
-      setErrorMsg('Please enter your Email address first to request a password reset.');
-      return;
-    }
-    
-    let email = identifier.trim();
-    if (!email.includes('@')) {
-      const match = mockDb.getStaffUsers().find(u => u.username && u.username.toLowerCase() === email.toLowerCase());
-      if (match) email = match.email;
-      else {
-        setErrorMsg('Invalid email format or username match not found.');
-        return;
-      }
-    }
-
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin
-      });
-      if (error) {
-        setErrorMsg(error.message);
-      } else {
-        setSuccessMsg(`Password reset link dispatched successfully to ${email}!`);
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Password reset request failed.');
-    }
-  };
-
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', width: '100%', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--primary-dark) 0%, #081125 100%)' }}>
-      <div className="card" style={{ width: '100%', maxWidth: '420px', padding: '36px', boxShadow: 'var(--shadow-lg)', border: '1px solid rgba(59, 130, 246, 0.15)', background: '#0e172a' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', width: '100%', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', fontFamily: 'Inter, system-ui, sans-serif' }}>
+      <div style={{ width: '100%', maxWidth: '580px', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '24px' }}>
         
-        {/* Branding header */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px', textAlign: 'center' }}>
-          <div style={{ background: 'linear-gradient(135deg, var(--secondary) 0%, var(--primary-light) 100%)', color: 'white', width: '56px', height: '56px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '24px', fontFamily: 'var(--display)', boxShadow: '0 8px 20px rgba(59, 130, 246, 0.25)', marginBottom: '16px' }}>
-            MS
-          </div>
-          <h2 style={{ color: '#ffffff', margin: 0, fontFamily: 'var(--display)', fontSize: '22px' }}>MUSTARD SEED</h2>
-          <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--secondary-light)', fontWeight: 'bold', marginTop: '4px' }}>
-            Welfare Fund Staff Sign-In
-          </span>
+        {/* Logo Icon */}
+        <div style={{ background: '#0F4C81', color: 'white', width: '64px', height: '64px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', boxShadow: '0 4px 6px -1px rgba(15, 76, 129, 0.2)' }}>
+          <Landmark size={32} />
         </div>
 
-        <form onSubmit={handleLogin}>
-          <div className="flex flex-col gap-16">
-            
-            {errorMsg && (
-              <div className="alert alert-danger" style={{ background: '#451a1a', color: '#fca5a5', borderLeftColor: 'var(--danger)', padding: '10px' }}>
-                <AlertCircle size={16} /> <span style={{ fontSize: '13px' }}>{errorMsg}</span>
-              </div>
-            )}
+        {/* Branding Title */}
+        <h1 style={{ fontSize: '24px', fontWeight: 600, color: '#0F172A', margin: '0 0 4px 0', textAlign: 'center' }}>
+          Mustard Seed Fund Management
+        </h1>
+        <span style={{ fontSize: '12px', fontWeight: 500, color: '#64748B', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '32px' }}>
+          SEGE DISTRICT
+        </span>
 
-            {successMsg && (
-              <div className="alert alert-success" style={{ background: '#143525', color: '#a7f3d0', borderLeftColor: 'var(--success)', padding: '10px' }}>
-                <ShieldCheck size={16} /> <span style={{ fontSize: '13px' }}>{successMsg}</span>
-              </div>
-            )}
+        {/* Login Form Card */}
+        <div style={{ width: '100%', maxWidth: '440px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '40px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)' }}>
+          
+          <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: '0 0 6px 0' }}>
+            Sign in
+          </h2>
+          <p style={{ fontSize: '14px', color: '#64748B', margin: '0 0 28px 0' }}>
+            Access the management console.
+          </p>
 
-            {/* Email/Username field */}
-            <div className="form-group">
-              <label style={{ color: '#94a3b8' }}>Email Address or Username</label>
-              <div style={{ display: 'flex', alignItems: 'center', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0 12px' }}>
-                <Mail size={16} style={{ color: '#64748b', marginRight: '8px' }} />
+          <form onSubmit={handleLogin}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {errorMsg && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#FEF2F2', borderLeft: '4px solid #EF4444', color: '#B91C1C', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <span>{errorMsg}</span>
+                </div>
+              )}
+
+              {successMsg && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ECFDF5', borderLeft: '4px solid #10B981', color: '#047857', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                  <ShieldCheck size={16} style={{ flexShrink: 0 }} />
+                  <span>{successMsg}</span>
+                </div>
+              )}
+
+              {/* Email Input */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+                  Email address
+                </label>
                 <input
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="admin@mustardseed.org"
-                  style={{ background: 'transparent', border: 'none', padding: '10px 0', width: '100%', outline: 'none', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #D1D5DB', borderRadius: '8px', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', background: '#FFFFFF', color: '#0F172A' }}
+                  placeholder=""
                   required
                 />
               </div>
-            </div>
 
-            {/* Password field */}
-            <div className="form-group">
-              <label style={{ color: '#94a3b8' }}>Password</label>
-              <div style={{ display: 'flex', alignItems: 'center', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '0 12px' }}>
-                <KeyRound size={16} style={{ color: '#64748b', marginRight: '8px' }} />
+              {/* Password Input */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+                  Password
+                </label>
                 <input
-                  type={showPassword ? 'text' : 'password'}
+                  type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  style={{ background: 'transparent', border: 'none', padding: '10px 0', width: '100%', outline: 'none', color: '#ffffff' }}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #D1D5DB', borderRadius: '8px', fontSize: '14px', outline: 'none', transition: 'border-color 0.2s', background: '#FFFFFF', color: '#0F172A' }}
+                  placeholder=""
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', padding: 0 }}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
               </div>
-            </div>
 
-            <div className="flex justify-between align-center" style={{ fontSize: '12px', marginTop: '4px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#94a3b8', cursor: 'pointer' }}>
-                <input type="checkbox" style={{ cursor: 'pointer' }} /> Remember Me
-              </label>
+              {/* Submit Button */}
               <button
-                type="button"
-                onClick={handleForgotPassword}
-                style={{ background: 'transparent', border: 'none', color: 'var(--secondary-light)', cursor: 'pointer', padding: 0, fontSize: '12px' }}
+                type="submit"
+                disabled={loading}
+                style={{ width: '100%', padding: '12px', background: '#0F4C81', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer', transition: 'background-color 0.2s', marginTop: '8px' }}
               >
-                Forgot Password?
+                {loading ? 'Signing in...' : 'Sign in'}
               </button>
+
             </div>
+          </form>
 
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ marginTop: '16px', padding: '12px', fontSize: '15px' }}
-              disabled={loading}
-            >
-              {loading ? 'Authenticating...' : 'Sign In'}
-            </button>
-
+          {/* Footer Text */}
+          <div style={{ marginTop: '28px', textAlign: 'center', fontSize: '12px', color: '#64748B' }}>
+            Account access is managed by your administrator.
           </div>
-        </form>
 
-        <div style={{ marginTop: '24px', textAlign: 'center', fontSize: '11px', color: '#64748b', borderTop: '1px solid #334155', paddingTop: '16px' }}>
-          SECURED BY SUPABASE AUTHENTICATION SYSTEM
         </div>
-
       </div>
     </div>
   );

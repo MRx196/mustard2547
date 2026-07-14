@@ -133,7 +133,7 @@ const INITIAL_SMS_TEMPLATES: SMSTemplate[] = [
 
 // Seed Staff Users
 const INITIAL_STAFF: StaffUser[] = [
-  { email: 'admin@mustardseed.org', full_name: 'Eric Kwetey (Admin)', role: 'Super Administrator', status: 'Active', last_signin: '2026-07-14T07:00:00Z', created_at: '2026-01-01T00:00:00Z', username: 'admin', phone_number: '+233240001100' },
+  { email: 'mrxmail20@gmail.com', full_name: 'Super Admin', role: 'Super Administrator', status: 'Active', last_signin: '2026-07-14T07:00:00Z', created_at: '2026-01-01T00:00:00Z', username: 'superadmin', phone_number: '+233240001100' },
   { email: 'accountant@mustardseed.org', full_name: 'Jane Mensah', role: 'Accountant', status: 'Active', last_signin: '2026-07-14T07:15:00Z', created_at: '2026-01-05T00:00:00Z', username: 'accountant', phone_number: '+233240001101' },
   { email: 'loans@mustardseed.org', full_name: 'Thomas Addo', role: 'Loan Officer', status: 'Active', last_signin: '2026-07-14T06:50:00Z', created_at: '2026-01-10T00:00:00Z', username: 'loans', phone_number: '+233240001102' },
   { email: 'momo@mustardseed.org', full_name: 'Mercy Osei', role: 'Collection Officer', status: 'Active', last_signin: '2026-07-14T07:22:00Z', created_at: '2026-01-12T00:00:00Z', username: 'momo', phone_number: '+233240001103' },
