@@ -62,7 +62,9 @@ function App() {
       setCurrentUser(JSON.parse(stored));
     }
     
-    refreshLocalState();
+    mockDb.syncFromSupabase().then(() => {
+      refreshLocalState();
+    });
   }, []);
 
   const refreshLocalState = () => {

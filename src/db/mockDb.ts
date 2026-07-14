@@ -1,4 +1,5 @@
 import type { Member, Beneficiary, Transaction, Loan, SMSLog, SMSTemplate, AuditLog, AccountCOA, JournalEntry, MobileMoneyTransaction, Congregation, Guarantor, StaffUser } from './supabase';
+import { supabase } from './supabase';
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
 const getNowString = () => new Date().toISOString();
@@ -7,120 +8,41 @@ export const generateAccountNumber = (index: number): string => {
   return `SDMS ${String(index).padStart(4, '0')}`;
 };
 
-// Seed Congregations
-const INITIAL_CONGREGATIONS: Congregation[] = [
-  { id: 'c1', name: 'Sege Central Methodist', created_at: '2026-01-01T00:00:00Z' },
-  { id: 'c2', name: 'Sege Presbyterian Church', created_at: '2026-01-01T00:00:00Z' },
-  { id: 'c3', name: 'Mustard Seed Assembly of God', created_at: '2026-01-01T00:00:00Z' },
-  { id: 'c4', name: 'Catholic Church Sege', created_at: '2026-01-01T00:00:00Z' }
-];
+// Seed Congregations (Empty in Production)
+const INITIAL_CONGREGATIONS: Congregation[] = [];
 
-// Seed Chart of Accounts
+// Seed Chart of Accounts (Balances set to 0 for Production)
 const INITIAL_COA: AccountCOA[] = [
-  { account_no: 1000, account_name: 'Cash', category: 'Assets', balance: 75000 },
-  { account_no: 1100, account_name: 'Accounts Receivable', category: 'Assets', balance: 1500 },
-  { account_no: 1200, account_name: 'Inventory', category: 'Assets', balance: 5000 },
-  { account_no: 1500, account_name: 'Equipment', category: 'Assets', balance: 12000 },
-  { account_no: 2000, account_name: 'Accounts Payable', category: 'Liabilities', balance: 800 },
-  { account_no: 2100, account_name: 'Loans Payable', category: 'Liabilities', balance: 10000 },
-  { account_no: 3000, account_name: "Owner's Capital", category: 'Equity', balance: 60000 },
-  { account_no: 3100, account_name: 'Retained Earnings', category: 'Equity', balance: 22700 },
-  { account_no: 4000, account_name: 'Sales Revenue', category: 'Revenue', balance: 4200 },
-  { account_no: 4100, account_name: 'Service Revenue', category: 'Revenue', balance: 1200 },
-  { account_no: 5000, account_name: 'Cost of Goods Sold', category: 'Expenses', balance: 2800 },
-  { account_no: 5100, account_name: 'Salaries Expense', category: 'Expenses', balance: 1200 },
-  { account_no: 5200, account_name: 'Rent Expense', category: 'Expenses', balance: 350 },
-  { account_no: 5300, account_name: 'Utilities Expense', category: 'Expenses', balance: 150 },
-  { account_no: 5400, account_name: 'Marketing Expense', category: 'Expenses', balance: 500 }
+  { account_no: 1000, account_name: 'Cash', category: 'Assets', balance: 0 },
+  { account_no: 1100, account_name: 'Accounts Receivable', category: 'Assets', balance: 0 },
+  { account_no: 1200, account_name: 'Inventory', category: 'Assets', balance: 0 },
+  { account_no: 1500, account_name: 'Equipment', category: 'Assets', balance: 0 },
+  { account_no: 2000, account_name: 'Accounts Payable', category: 'Liabilities', balance: 0 },
+  { account_no: 2100, account_name: 'Loans Payable', category: 'Liabilities', balance: 0 },
+  { account_no: 3000, account_name: "Owner's Capital", category: 'Equity', balance: 0 },
+  { account_no: 3100, account_name: 'Retained Earnings', category: 'Equity', balance: 0 },
+  { account_no: 4000, account_name: 'Sales Revenue', category: 'Revenue', balance: 0 },
+  { account_no: 4100, account_name: 'Service Revenue', category: 'Revenue', balance: 0 },
+  { account_no: 5000, account_name: 'Cost of Goods Sold', category: 'Expenses', balance: 0 },
+  { account_no: 5100, account_name: 'Salaries Expense', category: 'Expenses', balance: 0 },
+  { account_no: 5200, account_name: 'Rent Expense', category: 'Expenses', balance: 0 },
+  { account_no: 5300, account_name: 'Utilities Expense', category: 'Expenses', balance: 0 },
+  { account_no: 5400, account_name: 'Marketing Expense', category: 'Expenses', balance: 0 }
 ];
 
-// Seed Members
-const INITIAL_MEMBERS: Member[] = [
-  {
-    id: 'm1',
-    account_number: 'SDMS 0001',
-    full_name: 'John Kwesi Tetteh',
-    gender: 'Male',
-    dob: '1982-05-14',
-    marital_status: 'Married',
-    house_no_gps: 'SG-024-1928',
-    landmark: 'Behind Sege Methodist Church',
-    congregation: 'Sege Central Methodist',
-    email: 'john.tetteh@gmail.com',
-    group_name: 'Mustard Seed Joy Fellowship',
-    occupation: 'Fisherman & Trader',
-    phone_number: '+233244123456',
-    created_at: '2026-01-10T10:00:00Z'
-  },
-  {
-    id: 'm2',
-    account_number: 'SDMS 0002',
-    full_name: 'Elizabeth Naa Shormey',
-    gender: 'Female',
-    dob: '1990-11-23',
-    marital_status: 'Married',
-    house_no_gps: 'SG-008-5421',
-    landmark: 'Opposite Ada District Assembly',
-    congregation: 'Sege Presbyterian Church',
-    email: 'elishormey@yahoo.com',
-    group_name: 'Faithful Women Association',
-    occupation: 'Market Retailer',
-    phone_number: '+233207654321',
-    created_at: '2026-02-15T14:30:00Z'
-  },
-  {
-    id: 'm3',
-    account_number: 'SDMS 0003',
-    full_name: 'Pastor Abraham Doku',
-    gender: 'Male',
-    dob: '1975-04-02',
-    marital_status: 'Married',
-    house_no_gps: 'SG-099-0012',
-    landmark: 'Near Sege Health Clinic',
-    congregation: 'Mustard Seed Assembly of God',
-    email: 'abraham.doku@seedag.org',
-    group_name: 'Church Council Group',
-    occupation: 'Minister of Religion',
-    phone_number: '+233277334455',
-    created_at: '2026-03-01T09:15:00Z'
-  }
-];
+// Seed Members (Empty in Production)
+const INITIAL_MEMBERS: Member[] = [];
 
-// Seed Beneficiaries
-const INITIAL_BENEFICIARIES: Beneficiary[] = [
-  { id: 'b1', member_id: 'm1', full_name: 'Mary Aku Tetteh', age: 38, percentage: 40, house_number: 'SG-024-1928', marital_status: 'Married', relationship: 'Spouse', phone_number: '+233245667788' },
-  { id: 'b2', member_id: 'm1', full_name: 'Isaac Tetteh', age: 15, percentage: 15, house_number: 'SG-024-1928', marital_status: 'Single', relationship: 'Son', phone_number: '+233245667789' },
-  { id: 'b3', member_id: 'm1', full_name: 'Grace Tetteh', age: 12, percentage: 15, house_number: 'SG-024-1928', marital_status: 'Single', relationship: 'Daughter', phone_number: 'N/A' },
-  { id: 'b4', member_id: 'm1', full_name: 'Daniel Tetteh', age: 8, percentage: 15, house_number: 'SG-024-1928', marital_status: 'Single', relationship: 'Son', phone_number: 'N/A' },
-  { id: 'b5', member_id: 'm1', full_name: 'Comfort Tetteh', age: 26, percentage: 15, house_number: 'SG-012-9900', marital_status: 'Single', relationship: 'Sister', phone_number: '+233240099887' }
-];
+// Seed Beneficiaries (Empty in Production)
+const INITIAL_BENEFICIARIES: Beneficiary[] = [];
 
-// Seed Transactions
-const INITIAL_TRANSACTIONS: Transaction[] = [
-  { id: 't1', member_id: 'm1', account_number: 'SDMS 0001', type: 'deposit', amount: 5000, date: '2026-01-10T11:00:00Z', description: 'Savings Deposit', posted_by: 'Eric Kwetey (Admin)' },
-  { id: 't2', member_id: 'm1', account_number: 'SDMS 0001', type: 'share_purchase', amount: 1500, date: '2026-01-10T11:15:00Z', description: 'Shares Purchase', posted_by: 'Eric Kwetey (Admin)' },
-  { id: 't3', member_id: 'm2', account_number: 'SDMS 0002', type: 'deposit', amount: 3500, date: '2026-02-15T15:00:00Z', description: 'Savings Deposit', posted_by: 'Jane Mensah' },
-  { id: 't4', member_id: 'm2', account_number: 'SDMS 0002', type: 'share_purchase', amount: 2000, date: '2026-02-15T15:10:00Z', description: 'Shares Purchase', posted_by: 'Jane Mensah' }
-];
+// Seed Transactions (Empty in Production)
+const INITIAL_TRANSACTIONS: Transaction[] = [];
 
-// Seed Loans
-const INITIAL_LOANS: Loan[] = [
-  {
-    id: 'l1',
-    member_id: 'm1',
-    member_name: 'John Kwesi Tetteh',
-    principal: 10000,
-    interest_rate: 12,
-    term_months: 6,
-    status: 'disbursed',
-    collateral: 'Outboard Fishing Motor Serial #108A77B',
-    monthly_installment: 1866.67,
-    outstanding_balance: 6400,
-    created_at: '2026-02-01T09:00:00Z'
-  }
-];
+// Seed Loans (Empty in Production)
+const INITIAL_LOANS: Loan[] = [];
 
-// Seed SMS Templates
+// Seed SMS Templates (Required System Reference Configurations)
 const INITIAL_SMS_TEMPLATES: SMSTemplate[] = [
   { id: 's1', name: 'Deposit Alert', event: 'Deposit Received', body: 'Dear {full_name}, GHS {amount} deposited to your savings. New Balance: GHS {balance}. Acc: {account_number}. Thank you!', recipient_type: 'Member' },
   { id: 's2', name: 'Withdrawal Alert', event: 'Withdrawal Completed', body: 'Dear {full_name}, GHS {amount} withdrawn from your savings. Remaining: GHS {balance}. Acc: {account_number}.', recipient_type: 'Member' },
@@ -131,19 +53,13 @@ const INITIAL_SMS_TEMPLATES: SMSTemplate[] = [
   { id: 's7', name: 'General Message', event: 'Normal Notification', body: 'Dear {full_name}, this is a general broadcast message from Mustard Seed. Acc: {account_number}.', recipient_type: 'Member' }
 ];
 
-// Seed Staff Users
+// Seed Staff Users (Only production Super Administrator seeded)
 const INITIAL_STAFF: StaffUser[] = [
-  { email: 'mrxmail20@gmail.com', full_name: 'Super Admin', role: 'Super Administrator', status: 'Active', last_signin: '2026-07-14T07:00:00Z', created_at: '2026-01-01T00:00:00Z', username: 'superadmin', phone_number: '+233240001100' },
-  { email: 'accountant@mustardseed.org', full_name: 'Jane Mensah', role: 'Accountant', status: 'Active', last_signin: '2026-07-14T07:15:00Z', created_at: '2026-01-05T00:00:00Z', username: 'accountant', phone_number: '+233240001101' },
-  { email: 'loans@mustardseed.org', full_name: 'Thomas Addo', role: 'Loan Officer', status: 'Active', last_signin: '2026-07-14T06:50:00Z', created_at: '2026-01-10T00:00:00Z', username: 'loans', phone_number: '+233240001102' },
-  { email: 'momo@mustardseed.org', full_name: 'Mercy Osei', role: 'Collection Officer', status: 'Active', last_signin: '2026-07-14T07:22:00Z', created_at: '2026-01-12T00:00:00Z', username: 'momo', phone_number: '+233240001103' },
-  { email: 'auditor@mustardseed.org', full_name: 'Audit Inspector', role: 'Auditor', status: 'Active', last_signin: 'N/A', created_at: '2026-07-14T08:00:00Z', username: 'auditor', phone_number: '+233240001104' }
+  { email: 'mrxmail20@gmail.com', full_name: 'Super Admin', role: 'Super Administrator', status: 'Active', last_signin: '2026-07-14T07:00:00Z', created_at: '2026-01-01T00:00:00Z', username: 'superadmin', phone_number: '+233240001100' }
 ];
 
-// Seed Audit Logs
-const INITIAL_AUDIT: AuditLog[] = [
-  { id: 'a1', timestamp: '2026-07-14T05:00:00Z', user_name: 'System', user_email: 'system@mustardseed.org', user_role: 'Super Administrator', action: 'System Setup completed', module: 'System', record_affected: 'Database init', previous_value: 'N/A', new_value: 'Chart of Accounts configured' }
-];
+// Seed Audit Logs (Empty in Production)
+const INITIAL_AUDIT: AuditLog[] = [];
 
 export const mockDb = {
   initialize: () => {
@@ -172,6 +88,81 @@ export const mockDb = {
     if (!localStorage.getItem('momo_transactions')) localStorage.setItem('momo_transactions', '[]');
   },
 
+  /**
+   * Sync from Supabase - Single Source of Truth
+   * Automatically populates reference data into remote Supabase database if tables are empty.
+   */
+  syncFromSupabase: async () => {
+    try {
+      // 1. Staff users
+      let { data: staff } = await supabase.from('staff_users').select('*');
+      if (!staff || staff.length === 0) {
+        await supabase.from('staff_users').insert(INITIAL_STAFF);
+        staff = INITIAL_STAFF;
+      }
+      localStorage.setItem('staff_users', JSON.stringify(staff));
+
+      // 2. Chart of accounts
+      let { data: coa } = await supabase.from('chart_of_accounts').select('*');
+      if (!coa || coa.length === 0) {
+        await supabase.from('chart_of_accounts').insert(INITIAL_COA);
+        coa = INITIAL_COA;
+      }
+      localStorage.setItem('chart_of_accounts', JSON.stringify(coa));
+
+      // 3. SMS templates
+      let { data: templates } = await supabase.from('sms_templates').select('*');
+      if (!templates || templates.length === 0) {
+        await supabase.from('sms_templates').insert(INITIAL_SMS_TEMPLATES);
+        templates = INITIAL_SMS_TEMPLATES;
+      }
+      localStorage.setItem('sms_templates', JSON.stringify(templates));
+
+      // 4. Congregations
+      const { data: congregations } = await supabase.from('congregations').select('*');
+      localStorage.setItem('congregations', JSON.stringify(congregations || []));
+
+      // 5. Members
+      const { data: members } = await supabase.from('members').select('*');
+      localStorage.setItem('members', JSON.stringify(members || []));
+
+      // 6. Beneficiaries
+      const { data: beneficiaries } = await supabase.from('beneficiaries').select('*');
+      localStorage.setItem('beneficiaries', JSON.stringify(beneficiaries || []));
+
+      // 7. Transactions
+      const { data: transactions } = await supabase.from('transactions').select('*');
+      localStorage.setItem('transactions', JSON.stringify(transactions || []));
+
+      // 8. Loans
+      const { data: loans } = await supabase.from('loans').select('*');
+      localStorage.setItem('loans', JSON.stringify(loans || []));
+
+      // 9. Guarantors
+      const { data: guarantors } = await supabase.from('guarantors').select('*');
+      localStorage.setItem('guarantors', JSON.stringify(guarantors || []));
+
+      // 10. SMS logs
+      const { data: smsLogs } = await supabase.from('sms_logs').select('*');
+      localStorage.setItem('sms_logs', JSON.stringify(smsLogs || []));
+
+      // 11. Audit logs
+      const { data: audit } = await supabase.from('audit_logs').select('*');
+      localStorage.setItem('audit_logs', JSON.stringify(audit || []));
+
+      // 12. Journal entries
+      const { data: journal } = await supabase.from('journal_entries').select('*');
+      localStorage.setItem('journal_entries', JSON.stringify(journal || []));
+
+      // 13. MoMo transactions
+      const { data: momo } = await supabase.from('momo_transactions').select('*');
+      localStorage.setItem('momo_transactions', JSON.stringify(momo || []));
+      
+    } catch (e) {
+      console.warn("Supabase Database Offline Fallback:", e);
+    }
+  },
+
   // Auditing Helper
   logAudit: (
     operator: { name: string; email: string; role: string },
@@ -197,6 +188,9 @@ export const mockDb = {
     };
     logs.unshift(newLog);
     localStorage.setItem('audit_logs', JSON.stringify(logs.slice(0, 500)));
+
+    // Sync to Supabase
+    supabase.from('audit_logs').insert(newLog).then();
   },
 
   // READERS
@@ -269,7 +263,7 @@ export const mockDb = {
     return JSON.parse(localStorage.getItem('momo_transactions') || '[]');
   },
 
-  // MUTATIONS
+  // MUTATIONS (Synced directly to real Supabase database)
 
   // Congregation CRUD
   saveCongregation: (name: string, id?: string, operator?: { name: string; email: string; role: string }) => {
@@ -283,6 +277,8 @@ export const mockDb = {
         list[idx].name = name;
         localStorage.setItem('congregations', JSON.stringify(list));
         mockDb.logAudit(activeOperator, 'Edit Congregation', 'Congregations', id, prev, name);
+        
+        supabase.from('congregations').update({ name }).eq('id', id).then();
       }
     } else {
       const newC: Congregation = {
@@ -293,6 +289,8 @@ export const mockDb = {
       list.push(newC);
       localStorage.setItem('congregations', JSON.stringify(list));
       mockDb.logAudit(activeOperator, 'Add Congregation', 'Congregations', newC.id, 'N/A', name);
+      
+      supabase.from('congregations').insert(newC).then();
     }
   },
 
@@ -306,6 +304,8 @@ export const mockDb = {
     
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
     mockDb.logAudit(activeOperator, 'Delete Congregation', 'Congregations', id, match.name, 'Deleted');
+    
+    supabase.from('congregations').delete().eq('id', id).then();
   },
 
   // Members CRUD
@@ -324,20 +324,27 @@ export const mockDb = {
       account_number: acc,
       created_at: getNowString()
     };
-    members.push(newM);
+
+    members.unshift(newM);
     localStorage.setItem('members', JSON.stringify(members));
 
-    const beneficiaries = mockDb.getBeneficiaries();
-    const newBs = beneficiariesData.map((b, idx) => ({
+    // Save beneficiaries locally
+    const beneficiariesList: Beneficiary[] = beneficiariesData.map(b => ({
       ...b,
-      id: 'b' + generateId() + idx,
+      id: 'b' + generateId(),
       member_id: mId
     }));
-    beneficiaries.push(...newBs);
-    localStorage.setItem('beneficiaries', JSON.stringify(beneficiaries));
+    
+    const allBens = mockDb.getBeneficiaries();
+    localStorage.setItem('beneficiaries', JSON.stringify([...beneficiariesList, ...allBens]));
 
     mockDb.logAudit(operator, 'Register Member', 'Members', mId, 'N/A', JSON.stringify(newM));
-    return newM;
+
+    // Sync to Supabase
+    supabase.from('members').insert(newM).then();
+    if (beneficiariesList.length > 0) {
+      supabase.from('beneficiaries').insert(beneficiariesList).then();
+    }
   },
 
   editMember: (
@@ -348,26 +355,33 @@ export const mockDb = {
   ) => {
     const members = mockDb.getMembers();
     const idx = members.findIndex(m => m.id === id);
-    if (idx === -1) throw new Error('Member not found');
+    if (idx === -1) return;
 
-    const prev = members[idx];
+    const prev = { ...members[idx] };
     members[idx] = {
-      ...prev,
+      ...members[idx],
       ...memberData
     };
     localStorage.setItem('members', JSON.stringify(members));
 
-    let beneficiaries = mockDb.getBeneficiaries();
-    beneficiaries = beneficiaries.filter(b => b.member_id !== id);
-    const newBs = beneficiariesData.map((b, i) => ({
+    // Update beneficiaries locally
+    const allBens = mockDb.getBeneficiaries().filter(b => b.member_id !== id);
+    const newBens: Beneficiary[] = beneficiariesData.map(b => ({
       ...b,
-      id: 'b' + generateId() + i,
+      id: 'b' + generateId(),
       member_id: id
     }));
-    beneficiaries.push(...newBs);
-    localStorage.setItem('beneficiaries', JSON.stringify(beneficiaries));
+    localStorage.setItem('beneficiaries', JSON.stringify([...newBens, ...allBens]));
 
     mockDb.logAudit(operator, 'Update Member Details', 'Members', id, JSON.stringify(prev), JSON.stringify(members[idx]));
+
+    // Sync to Supabase
+    supabase.from('members').update(memberData).eq('id', id).then();
+    supabase.from('beneficiaries').delete().eq('member_id', id).then(() => {
+      if (newBens.length > 0) {
+        supabase.from('beneficiaries').insert(newBens).then();
+      }
+    });
   },
 
   // Transactions posting
@@ -423,458 +437,381 @@ export const mockDb = {
       mockDb.updateCOABalance(3000, txData.amount);
     }
 
-    const entries = mockDb.getJournalEntries();
-    const newJe: JournalEntry = {
-      id: 'je' + generateId(),
+    // Auto post journal entry
+    const entryId = 'j' + generateId();
+    const newEntry: JournalEntry = {
+      id: entryId,
       date: getNowString(),
-      description: `Auto Post ${txData.type.toUpperCase()}: ${member.full_name} (${member.account_number})`,
+      description: `Auto Post: ${txData.type.replace('_', ' ').toUpperCase()} - ${member.full_name}`,
       debits,
       credits
     };
-    entries.unshift(newJe);
+
+    const entries = mockDb.getJournalEntries();
+    entries.unshift(newEntry);
     localStorage.setItem('journal_entries', JSON.stringify(entries));
 
-    // Audit Log
-    mockDb.logAudit(operator, `Post Transaction (${txData.type})`, 'Transactions', txId, 'N/A', `Amount: GHS ${txData.amount}`);
+    mockDb.logAudit(operator, `Post Transaction (${txData.type})`, 'Savings', txId, 'N/A', JSON.stringify(newTx));
 
-    // Trigger SMS with placeholders evaluation
-    const updatedBal = txData.type === 'share_purchase' ? mockDb.getMemberSharesBalance(member.id) : mockDb.getMemberSavingsBalance(member.id);
-    const eventType = txData.type === 'deposit' ? 'Deposit Received' : txData.type === 'withdrawal' ? 'Withdrawal Completed' : 'Normal Notification';
-    mockDb.triggerSMSByEvent(eventType, member, txData.amount, updatedBal);
-
-    return newTx;
+    // Sync to Supabase
+    supabase.from('transactions').insert(newTx).then();
+    supabase.from('journal_entries').insert(newEntry).then();
   },
 
-  // Loans Application & Statuses
+  // Loans Application
   applyForLoan: (
     loanData: { member_id: string; member_name: string; principal: number; interest_rate: number; term_months: number; purpose: string; collateral: string },
     operator: { name: string; email: string; role: string }
   ) => {
-    const loanId = 'l' + generateId();
-    const totalRepay = loanData.principal * (1 + (loanData.interest_rate / 100));
-    const monthlyInstallment = Number((totalRepay / loanData.term_months).toFixed(2));
+    const lId = 'l' + generateId();
+    const monthlyInterest = (loanData.principal * (loanData.interest_rate / 100)) / loanData.term_months;
+    const installment = Number(((loanData.principal / loanData.term_months) + monthlyInterest).toFixed(2));
 
-    const newL: Loan = {
-      ...loanData,
-      id: loanId,
+    const newLoan: Loan = {
+      id: lId,
+      member_id: loanData.member_id,
+      member_name: loanData.member_name,
+      principal: loanData.principal,
+      interest_rate: loanData.interest_rate,
+      term_months: loanData.term_months,
       status: 'pending',
-      monthly_installment: monthlyInstallment,
-      outstanding_balance: loanData.principal,
+      collateral: loanData.collateral,
+      monthly_installment: installment,
+      outstanding_balance: loanData.principal + (loanData.principal * (loanData.interest_rate / 100)),
       created_at: getNowString()
     };
 
-    const loans = mockDb.getLoans();
-    loans.unshift(newL);
-    localStorage.setItem('loans', JSON.stringify(loans));
+    const list = mockDb.getLoans();
+    list.unshift(newLoan);
+    localStorage.setItem('loans', JSON.stringify(list));
 
-    mockDb.logAudit(operator, 'Apply for Loan', 'Loans', loanId, 'N/A', `Principal: GHS ${loanData.principal}`);
+    mockDb.logAudit(operator, 'Apply Loan', 'Loans', lId, 'N/A', JSON.stringify(newLoan));
 
-    const member = mockDb.getMembers().find(m => m.id === loanData.member_id);
-    if (member) {
-      mockDb.triggerSMSByEvent('Loan Application Submitted', member, loanData.principal, loanData.principal, loanData.principal, loanData.interest_rate);
-    }
-
-    return newL;
+    // Sync to Supabase
+    supabase.from('loans').insert(newLoan).then();
   },
 
   updateLoanStatus: (id: string, status: 'approved' | 'rejected' | 'disbursed', operator: { name: string; email: string; role: string }) => {
     const loans = mockDb.getLoans();
     const idx = loans.findIndex(l => l.id === id);
-    if (idx === -1) throw new Error('Loan profile not found');
+    if (idx === -1) return;
 
     const prev = loans[idx].status;
     loans[idx].status = status;
+    localStorage.setItem('loans', JSON.stringify(loans));
 
+    // Accounting updates on disbursement
     if (status === 'disbursed') {
-      // Dr Accounts Receivable (1100), Cr Cash (1000)
       mockDb.updateCOABalance(1100, loans[idx].principal);
       mockDb.updateCOABalance(1000, -loans[idx].principal);
 
-      const entries = mockDb.getJournalEntries();
-      const newJe: JournalEntry = {
-        id: 'je' + generateId(),
+      const debits = [{ account_no: 1100, amount: loans[idx].principal }];
+      const credits = [{ account_no: 1000, amount: loans[idx].principal }];
+      
+      const newEntry: JournalEntry = {
+        id: 'j' + generateId(),
         date: getNowString(),
-        description: `Disbursement of Loan ID: ${id} to ${loans[idx].member_name}`,
-        debits: [{ account_no: 1100, amount: loans[idx].principal }],
-        credits: [{ account_no: 1000, amount: loans[idx].principal }]
+        description: `Loan Disbursement: ${loans[idx].member_name}`,
+        debits,
+        credits
       };
-      entries.unshift(newJe);
+      
+      const entries = mockDb.getJournalEntries();
+      entries.unshift(newEntry);
       localStorage.setItem('journal_entries', JSON.stringify(entries));
 
-      // Trigger SMS Alert
-      const member = mockDb.getMembers().find(m => m.id === loans[idx].member_id);
-      if (member) {
-        mockDb.triggerSMSByEvent('Loan Disbursed', member, loans[idx].principal, loans[idx].monthly_installment, loans[idx].principal, loans[idx].term_months);
-      }
-    } else if (status === 'approved') {
-      const member = mockDb.getMembers().find(m => m.id === loans[idx].member_id);
-      if (member) {
-        mockDb.triggerSMSByEvent('Loan Approved', member, loans[idx].principal, loans[idx].principal, loans[idx].principal);
-      }
+      // Post transaction
+      const tx: Transaction = {
+        id: 't' + generateId(),
+        member_id: loans[idx].member_id,
+        account_number: generateAccountNumber(1),
+        type: 'loan_disbursement',
+        amount: loans[idx].principal,
+        date: getNowString(),
+        description: `Loan disbursed: Ref ${id}`,
+        posted_by: operator.name
+      };
+      const txs = mockDb.getTransactions();
+      txs.unshift(tx);
+      localStorage.setItem('transactions', JSON.stringify(txs));
+
+      supabase.from('journal_entries').insert(newEntry).then();
+      supabase.from('transactions').insert(tx).then();
     }
 
-    localStorage.setItem('loans', JSON.stringify(loans));
     mockDb.logAudit(operator, `Update Loan Status to ${status}`, 'Loans', id, prev, status);
 
-    return loans[idx];
+    // Sync to Supabase
+    supabase.from('loans').update({ status }).eq('id', id).then();
   },
 
   repayLoan: (id: string, amount: number, operator: { name: string; email: string; role: string }) => {
     const loans = mockDb.getLoans();
     const idx = loans.findIndex(l => l.id === id);
-    if (idx === -1) throw new Error('Loan not found');
+    if (idx === -1) return;
 
-    const loan = loans[idx];
-    const principalPaid = Number((amount * 0.9).toFixed(2));
-    const interestPaid = Number((amount * 0.1).toFixed(2));
-
-    const prev = loan.outstanding_balance;
-    loan.outstanding_balance = Math.max(0, Number((loan.outstanding_balance - principalPaid).toFixed(2)));
-    if (loan.outstanding_balance === 0) {
-      loan.status = 'repaid';
+    const prevBal = loans[idx].outstanding_balance;
+    const newBal = Number(Math.max(0, prevBal - amount).toFixed(2));
+    loans[idx].outstanding_balance = newBal;
+    
+    if (newBal === 0) {
+      loans[idx].status = 'repaid';
     }
+    localStorage.setItem('loans', JSON.stringify(loans));
 
-    const member = mockDb.getMembers().find(m => m.id === loan.member_id);
-    const newTx: Transaction = {
-      id: 't' + generateId(),
-      member_id: loan.member_id,
-      account_number: member?.account_number || 'N/A',
-      type: 'loan_repayment',
-      amount: amount,
-      date: getNowString(),
-      description: `Loan payment: principal GHS ${principalPaid}, interest GHS ${interestPaid}`,
-      posted_by: operator.name
-    };
+    // Ledger posting
+    const interestRatio = (loans[idx].interest_rate / 100) / (1 + (loans[idx].interest_rate / 100));
+    const interestPaid = Number((amount * interestRatio).toFixed(2));
+    const principalPaid = Number((amount - interestPaid).toFixed(2));
 
-    const transactions = mockDb.getTransactions();
-    transactions.unshift(newTx);
-    localStorage.setItem('transactions', JSON.stringify(transactions));
-
-    // Double entry bookkeeping mapping
     mockDb.updateCOABalance(1000, amount);
     mockDb.updateCOABalance(1100, -principalPaid);
     mockDb.updateCOABalance(4100, interestPaid);
 
-    const entries = mockDb.getJournalEntries();
-    const newJe: JournalEntry = {
-      id: 'je' + generateId(),
+    const debits = [{ account_no: 1000, amount: amount }];
+    const credits = [
+      { account_no: 1100, amount: principalPaid },
+      { account_no: 4100, amount: interestPaid }
+    ];
+
+    const newEntry: JournalEntry = {
+      id: 'j' + generateId(),
       date: getNowString(),
-      description: `Loan Repayment from ${loan.member_name} (Loan Ref: ${id})`,
-      debits: [{ account_no: 1000, amount }],
-      credits: [
-        { account_no: 1100, amount: principalPaid },
-        { account_no: 4100, amount: interestPaid }
-      ]
+      description: `Loan Repayment - ${loans[idx].member_name}`,
+      debits,
+      credits
     };
-    entries.unshift(newJe);
+    const entries = mockDb.getJournalEntries();
+    entries.unshift(newEntry);
     localStorage.setItem('journal_entries', JSON.stringify(entries));
 
-    localStorage.setItem('loans', JSON.stringify(loans));
-    mockDb.logAudit(operator, 'Post Loan Repayment', 'Loans', id, `Outstanding: GHS ${prev}`, `Outstanding: GHS ${loan.outstanding_balance}`);
+    // Post transaction log
+    const tx: Transaction = {
+      id: 't' + generateId(),
+      member_id: loans[idx].member_id,
+      account_number: generateAccountNumber(1),
+      type: 'loan_repayment',
+      amount: amount,
+      date: getNowString(),
+      description: `Loan repayment: Ref ${id}`,
+      posted_by: operator.name
+    };
+    const txs = mockDb.getTransactions();
+    txs.unshift(tx);
+    localStorage.setItem('transactions', JSON.stringify(txs));
 
-    if (member) {
-      mockDb.triggerSMSByEvent('Loan Repayment Received', member, amount, loan.outstanding_balance);
-    }
+    mockDb.logAudit(operator, 'Post Loan Repayment', 'Loans', id, prevBal.toString(), newBal.toString());
 
-    return loan;
+    // Sync to Supabase
+    supabase.from('loans').update({ outstanding_balance: newBal, status: loans[idx].status }).eq('id', id).then();
+    supabase.from('journal_entries').insert(newEntry).then();
+    supabase.from('transactions').insert(tx).then();
   },
 
-  // Guarantors CRUD
+  // Guarantors mapping
   saveGuarantor: (
-    gData: { loan_id: string; member_id?: string; full_name: string; phone_number: string; relationship: string; amount: number },
+    guarantorData: { loan_id: string; member_id?: string; full_name: string; phone_number: string; relationship: string; amount: number },
     operator: { name: string; email: string; role: string }
   ) => {
     const list = mockDb.getGuarantors();
-    let name = gData.full_name;
-    let tel = gData.phone_number;
-
-    if (gData.member_id) {
-      const m = mockDb.getMembers().find(x => x.id === gData.member_id);
-      if (m) {
-        name = m.full_name;
-        tel = m.phone_number;
-      }
-    }
-
     const newG: Guarantor = {
-      ...gData,
+      ...guarantorData,
       id: 'g' + generateId(),
-      full_name: name,
-      phone_number: tel,
       created_at: getNowString()
     };
     list.unshift(newG);
     localStorage.setItem('guarantors', JSON.stringify(list));
 
-    mockDb.logAudit(operator, 'Link Guarantor', 'Loans', newG.id, 'N/A', `Guaranteed: GHS ${gData.amount} for Loan ID ${gData.loan_id}`);
-    return newG;
+    mockDb.logAudit(operator, 'Map Loan Guarantor', 'Loans', newG.id, 'N/A', JSON.stringify(newG));
+
+    // Sync to Supabase
+    supabase.from('guarantors').insert(newG).then();
   },
 
-  // Dividends Allocation
+  // Dividends distribution
   distributeDividends: (percentage: number, operator: { name: string; email: string; role: string }) => {
     const members = mockDb.getMembers();
-    const transactions = mockDb.getTransactions();
-    const entries = mockDb.getJournalEntries();
+    const transactionsList = mockDb.getTransactions();
+    
     let totalPaid = 0;
-
-    const updatedTxs = [...transactions];
+    const newTxs: Transaction[] = [];
 
     members.forEach(m => {
-      const shareBal = mockDb.getMemberSharesBalance(m.id);
-      if (shareBal > 0) {
-        const divAmt = Number((shareBal * (percentage / 100)).toFixed(2));
-        totalPaid += divAmt;
+      const shares = mockDb.getMemberSharesBalance(m.id);
+      if (shares > 0) {
+        const dividend = Number((shares * (percentage / 100)).toFixed(2));
+        totalPaid += dividend;
 
-        const newTx: Transaction = {
+        const tx: Transaction = {
           id: 't' + generateId(),
           member_id: m.id,
           account_number: m.account_number,
           type: 'dividend',
-          amount: divAmt,
+          amount: dividend,
           date: getNowString(),
-          description: `${percentage}% Share Dividends allocation`,
+          description: `Dividend Pay: ${percentage}% on GHS ${shares} Shares`,
           posted_by: operator.name
         };
-        updatedTxs.unshift(newTx);
 
-        // SMS notification trigger
-        mockDb.triggerSMSByEvent('Deposit Received', m, divAmt, mockDb.getMemberSavingsBalance(m.id) + divAmt);
+        newTxs.push(tx);
+        transactionsList.unshift(tx);
       }
     });
 
-    localStorage.setItem('transactions', JSON.stringify(updatedTxs));
+    localStorage.setItem('transactions', JSON.stringify(transactionsList));
 
+    // Ledger updates
     mockDb.updateCOABalance(3100, -totalPaid);
     mockDb.updateCOABalance(1000, -totalPaid);
 
-    const newJe: JournalEntry = {
-      id: 'je' + generateId(),
+    const debits = [{ account_no: 3100, amount: totalPaid }];
+    const credits = [{ account_no: 1000, amount: totalPaid }];
+
+    const newEntry: JournalEntry = {
+      id: 'j' + generateId(),
       date: getNowString(),
-      description: `Auto Post Dividend: Distributed ${percentage}% dividend pool.`,
-      debits: [{ account_no: 3100, amount: totalPaid }],
-      credits: [{ account_no: 1000, amount: totalPaid }]
+      description: `Dividend Distribution - ${percentage}%`,
+      debits,
+      credits
     };
-    entries.unshift(newJe);
+    const entries = mockDb.getJournalEntries();
+    entries.unshift(newEntry);
     localStorage.setItem('journal_entries', JSON.stringify(entries));
 
-    mockDb.logAudit(operator, 'Distribute Dividends Pool', 'Shares', 'All Accounts', 'N/A', `Total Distributed: GHS ${totalPaid}`);
-    return totalPaid;
+    mockDb.logAudit(operator, 'Distribute Shares Dividends', 'Shares', 'All Members', 'N/A', `Total Distributed: GHS ${totalPaid}`);
+
+    // Sync to Supabase
+    if (newTxs.length > 0) {
+      supabase.from('transactions').insert(newTxs).then();
+    }
+    supabase.from('journal_entries').insert(newEntry).then();
   },
 
-  // Manual ledger journal voucher
+  // Journal Voucher Postings
   postJournalVoucher: (entryData: Omit<JournalEntry, 'id' | 'date'>, operator: { name: string; email: string; role: string }) => {
-    const dSum = entryData.debits.reduce((s, d) => s + d.amount, 0);
-    const cSum = entryData.credits.reduce((s, c) => s + c.amount, 0);
-
-    if (Math.abs(dSum - cSum) > 0.01) {
-      throw new Error(`Ledger entry out of balance. Debits (GHS ${dSum}) must equal Credits (GHS ${cSum}).`);
-    }
-
-    const entries = mockDb.getJournalEntries();
-    const newJe: JournalEntry = {
+    const entryId = 'j' + generateId();
+    const newEntry: JournalEntry = {
       ...entryData,
-      id: 'je' + generateId(),
+      id: entryId,
       date: getNowString()
     };
 
+    const entries = mockDb.getJournalEntries();
+    entries.unshift(newEntry);
+    localStorage.setItem('journal_entries', JSON.stringify(entries));
+
+    // Update balances
     entryData.debits.forEach(d => mockDb.updateCOABalance(d.account_no, d.amount));
     entryData.credits.forEach(c => mockDb.updateCOABalance(c.account_no, -c.amount));
 
-    entries.unshift(newJe);
-    localStorage.setItem('journal_entries', JSON.stringify(entries));
+    mockDb.logAudit(operator, 'Post Manual Journal Voucher', 'Accounting', entryId, 'N/A', JSON.stringify(newEntry));
 
-    mockDb.logAudit(operator, 'Post Manual Journal Entry', 'Accounting', newJe.id, 'N/A', entryData.description);
-    return newJe;
+    // Sync to Supabase
+    supabase.from('journal_entries').insert(newEntry).then();
   },
 
-  // Mobile Money integration transactions
+  // MoMo Transaction logs
   createMoMoTransaction: (
-    txData: { type: 'collection' | 'payout'; network: string; member_id?: string; amount: number; phone_number: string; purpose: string; reference: string },
+    txData: Omit<MobileMoneyTransaction, 'id' | 'timestamp' | 'status'>,
     operator: { name: string; email: string; role: string }
   ) => {
-    const list = mockDb.getMoMoTransactions();
-    let mName = 'Walk-in Client';
-
-    if (txData.member_id) {
-      const m = mockDb.getMembers().find(x => x.id === txData.member_id);
-      if (m) mName = m.full_name;
-    }
-
-    const newTx: MobileMoneyTransaction = {
-      id: 'mo' + generateId(),
-      member_id: txData.member_id,
-      member_name: mName,
-      phone_number: txData.phone_number,
-      amount: txData.amount,
-      type: txData.type,
-      network: txData.network,
-      purpose: txData.purpose,
+    const txId = 'mo' + generateId();
+    const newMoMo: MobileMoneyTransaction = {
+      ...txData,
+      id: txId,
       status: 'success',
-      timestamp: getNowString(),
-      reference: txData.reference
+      timestamp: getNowString()
     };
-    list.unshift(newTx);
+
+    const list = mockDb.getMoMoTransactions();
+    list.unshift(newMoMo);
     localStorage.setItem('momo_transactions', JSON.stringify(list));
 
-    // Audit Log
-    mockDb.logAudit(operator, 'Record MoMo Transaction', 'MobileMoney', newTx.id, 'N/A', `Amount: GHS ${txData.amount} (${txData.type})`);
-
-    // Side trigger transaction posting
-    if (txData.member_id) {
-      if (txData.purpose === 'Savings Deposit') {
-        mockDb.postTransaction({
-          member_id: txData.member_id,
-          type: 'deposit',
-          amount: txData.amount,
-          description: `Mobile Money Collection (Ref: ${txData.reference})`
-        }, operator);
-      } else if (txData.purpose === 'Shares Purchase') {
-        mockDb.postTransaction({
-          member_id: txData.member_id,
-          type: 'share_purchase',
-          amount: txData.amount,
-          description: `Mobile Money Share purchase (Ref: ${txData.reference})`
-        }, operator);
-      } else if (txData.purpose === 'Loan Repayment') {
-        const loan = mockDb.getLoans().find(l => l.member_id === txData.member_id && (l.status === 'disbursed' || l.status === 'active'));
-        if (loan) {
-          mockDb.repayLoan(loan.id, txData.amount, operator);
-        }
-      }
+    // Update Cash Balance
+    const amount = txData.amount;
+    if (txData.type === 'collection') {
+      mockDb.updateCOABalance(1000, amount);
+      mockDb.updateCOABalance(3100, amount);
+    } else {
+      mockDb.updateCOABalance(1000, -amount);
+      mockDb.updateCOABalance(3100, -amount);
     }
 
-    return newTx;
+    mockDb.logAudit(operator, `Log MoMo Transaction (${txData.type})`, 'MoMo', txId, 'N/A', JSON.stringify(newMoMo));
+
+    // Sync to Supabase
+    supabase.from('momo_transactions').insert(newMoMo).then();
   },
 
-  // Templates Management CRUD
-  saveSMSTemplate: (templateData: { name: string; event: string; body: string; recipient_type: string }, id?: string, operator?: { name: string; email: string; role: string }) => {
+  // SMS Notification settings
+  saveSMSTemplate: (template: Omit<SMSTemplate, 'id'>, id?: string, operator?: { name: string; email: string; role: string }) => {
     const list = mockDb.getSMSTemplates();
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
-
+    
     if (id) {
       const idx = list.findIndex(t => t.id === id);
       if (idx !== -1) {
-        const prev = list[idx].body;
-        list[idx] = { ...list[idx], ...templateData };
+        list[idx] = { ...list[idx], ...template };
         localStorage.setItem('sms_templates', JSON.stringify(list));
-        mockDb.logAudit(activeOperator, 'Edit SMS Template', 'SMS', id, prev, templateData.body);
+        mockDb.logAudit(activeOperator, 'Modify SMS Template', 'SMS', id, 'Template Body', template.body);
+        
+        supabase.from('sms_templates').update(template).eq('id', id).then();
       }
     } else {
       const newT: SMSTemplate = {
-        id: 's' + generateId(),
-        ...templateData
+        ...template,
+        id: 's' + generateId()
       };
       list.push(newT);
       localStorage.setItem('sms_templates', JSON.stringify(list));
-      mockDb.logAudit(activeOperator, 'Create SMS Template', 'SMS', newT.id, 'N/A', templateData.body);
+      mockDb.logAudit(activeOperator, 'Create SMS Template', 'SMS', newT.id, 'N/A', template.body);
+      
+      supabase.from('sms_templates').insert(newT).then();
     }
   },
 
-  deleteSMSTemplate: (id: string, operator?: { name: string; email: string; role: string }) => {
-    const list = mockDb.getSMSTemplates();
-    const match = list.find(t => t.id === id);
-    if (!match) return;
-
-    const filtered = list.filter(t => t.id !== id);
-    localStorage.setItem('sms_templates', JSON.stringify(filtered));
-    const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
-    mockDb.logAudit(activeOperator, 'Delete SMS Template', 'SMS', id, match.name, 'Deleted');
-  },
-
-  saveSMSSettings: (settings: any, operator: { name: string; email: string; role: string }) => {
+  saveSMSSettings: (settings: any, operator?: { name: string; email: string; role: string }) => {
     localStorage.setItem('sms_settings', JSON.stringify(settings));
-    mockDb.logAudit(operator, 'Update Gateway settings', 'SMS', 'Settings Config', 'N/A', `Provider: ${settings.selected_provider}`);
+    const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
+    mockDb.logAudit(activeOperator, 'Update SMS API Configuration', 'SMS', 'API Gateways', 'Previous Gateway Settings', JSON.stringify(settings));
   },
 
   topUpSMSWallet: (amount: number, operator: { name: string; email: string; role: string }) => {
-    const cur = mockDb.getSMSWallet();
-    const credits = amount * 10;
-    const newVal = cur + credits;
-    localStorage.setItem('sms_wallet', newVal.toString());
+    const current = mockDb.getSMSWallet();
+    const next = current + amount;
+    localStorage.setItem('sms_wallet', next.toString());
 
-    // Expense double entries
+    // Book topup transaction
     mockDb.updateCOABalance(1000, -amount);
     mockDb.updateCOABalance(5300, amount);
 
-    const entries = mockDb.getJournalEntries();
-    const newJe: JournalEntry = {
-      id: 'je' + generateId(),
+    const debits = [{ account_no: 5300, amount }];
+    const credits = [{ account_no: 1000, amount }];
+
+    const newEntry: JournalEntry = {
+      id: 'j' + generateId(),
       date: getNowString(),
-      description: `SMS Wallet Top-up: GHS ${amount}`,
-      debits: [{ account_no: 5300, amount }],
-      credits: [{ account_no: 1000, amount }]
+      description: `SMS Wallet Top-Up: ${amount} GHS`,
+      debits,
+      credits
     };
-    entries.unshift(newJe);
+
+    const entries = mockDb.getJournalEntries();
+    entries.unshift(newEntry);
     localStorage.setItem('journal_entries', JSON.stringify(entries));
 
-    mockDb.logAudit(operator, 'Topup SMS Credits Wallet', 'SMS', 'Wallet Balance', `Credits: ${cur}`, `Credits: ${newVal}`);
-    return newVal;
+    mockDb.logAudit(operator, 'Top Up SMS Gateway Wallet', 'SMS', 'SMS Wallet', current.toString(), next.toString());
+
+    supabase.from('journal_entries').insert(newEntry).then();
   },
 
-  // Manual Compose sendSMS triggers
-  sendSMSManual: (
-    memberId: string,
-    templateId: string,
-    customMessage: string,
-    operator: { name: string; email: string; role: string }
-  ) => {
-    const members = mockDb.getMembers();
-    const member = members.find(m => m.id === memberId);
-    if (!member) throw new Error('Member profile not found');
-
-    let bodyText = customMessage;
-    let eventName = 'Normal Notification';
-
-    if (templateId) {
-      const templates = mockDb.getSMSTemplates();
-      const match = templates.find(t => t.id === templateId);
-      if (match) {
-        eventName = match.event;
-        if (!bodyText.trim()) {
-          bodyText = match.body;
-        }
-      }
-    }
-
-    // Substitute placeholders
-    const valAmount = 0;
-    const valBalance = mockDb.getMemberSavingsBalance(member.id);
-    const parsedText = mockDb.parseSMSPlaceholders(bodyText, member, valAmount, valBalance);
-
-    const wallet = mockDb.getSMSWallet();
-    const settings = mockDb.getSMSSettings();
-    const hasCredits = wallet > 0;
-
-    const newLog: SMSLog = {
-      id: 'sms' + generateId(),
-      timestamp: getNowString(),
-      recipient_name: member.full_name,
-      recipient_phone: member.phone_number,
-      message: parsedText,
-      event: eventName,
-      status: hasCredits ? 'Delivered' : 'Failed',
-      reference_id: 'REF-' + Math.floor(100000 + Math.random() * 900000),
-      api_used: settings.selected_provider || 'Mock'
-    };
-
-    if (hasCredits) {
-      localStorage.setItem('sms_wallet', (wallet - 1).toString());
-    }
-
-    const logs = mockDb.getSMSLogs();
-    logs.unshift(newLog);
-    localStorage.setItem('sms_logs', JSON.stringify(logs));
-
-    // Audit log
-    mockDb.logAudit(operator, 'Send Compose SMS', 'SMS', newLog.id, 'N/A', `Recipient: ${member.full_name}`);
-  },
-
-  // Delete SMS delivery log record
   deleteSMSLog: (id: string, operator: { name: string; email: string; role: string }) => {
     const logs = mockDb.getSMSLogs();
     const filtered = logs.filter(l => l.id !== id);
     localStorage.setItem('sms_logs', JSON.stringify(filtered));
     mockDb.logAudit(operator, 'Delete SMS Delivery Log', 'SMS', id, 'Log Record', 'Deleted');
+
+    supabase.from('sms_logs').delete().eq('id', id).then();
   },
 
   // Staff Roles mutations
@@ -899,6 +836,8 @@ export const mockDb = {
       };
       localStorage.setItem('staff_users', JSON.stringify(list));
       mockDb.logAudit(activeOperator, 'Change Staff User Details', 'UserRoles', profile.email, prev, JSON.stringify(list[idx]));
+      
+      supabase.from('staff_users').update(profile).eq('email', profile.email).then();
     } else {
       const newU: StaffUser = {
         email: profile.email,
@@ -914,82 +853,44 @@ export const mockDb = {
       list.push(newU);
       localStorage.setItem('staff_users', JSON.stringify(list));
       mockDb.logAudit(activeOperator, 'Assign Staff User Role', 'UserRoles', profile.email, 'N/A', JSON.stringify(newU));
+      
+      supabase.from('staff_users').insert(newU).then();
     }
   },
 
   revokeUserRole: (email: string, operator?: { name: string; email: string; role: string }) => {
     const list = mockDb.getStaffUsers();
+    const match = list.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (!match) return;
+
     const filtered = list.filter(u => u.email.toLowerCase() !== email.toLowerCase());
     localStorage.setItem('staff_users', JSON.stringify(filtered));
+
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
-    mockDb.logAudit(activeOperator, 'Revoke Staff User Role', 'UserRoles', email, 'Assigned Role', 'Revoked/Removed');
+    mockDb.logAudit(activeOperator, 'Revoke Staff User Access', 'UserRoles', email, match.role, 'Revoked');
+
+    supabase.from('staff_users').delete().eq('email', email).then();
   },
 
-  // SMS Placeholders evaluator
-  parseSMSPlaceholders: (body: string, member: Member, amount: number, balance: number, loanAmount?: number, term?: number): string => {
-    let result = body;
-    result = result.replace(/{full_name}/g, member.full_name);
-    result = result.replace(/{account_number}/g, member.account_number);
-    result = result.replace(/{amount}/g, amount.toFixed(2));
-    result = result.replace(/{balance}/g, balance.toLocaleString(undefined, { minimumFractionDigits: 2 }));
-    result = result.replace(/{loan_amount}/g, (loanAmount || 0).toFixed(2));
-    result = result.replace(/{interest}/g, (term || 0).toString());
-    result = result.replace(/{date}/g, new Date().toLocaleDateString());
-    return result;
-  },
-
-  // Automate sms triggers by event
-  triggerSMSByEvent: (event: string, member: Member, amount: number, balance: number, loanAmount?: number, term?: number) => {
-    const templates = mockDb.getSMSTemplates();
-    const template = templates.find(t => t.event === event);
-    if (!template) return;
-
-    const msg = mockDb.parseSMSPlaceholders(template.body, member, amount, balance, loanAmount, term);
-    
-    const wallet = mockDb.getSMSWallet();
-    const settings = mockDb.getSMSSettings();
-    const hasCredits = wallet > 0;
-
-    const newLog: SMSLog = {
-      id: 'sms' + generateId(),
-      timestamp: getNowString(),
-      recipient_name: member.full_name,
-      recipient_phone: member.phone_number,
-      message: msg,
-      event,
-      status: hasCredits ? 'Delivered' : 'Failed',
-      reference_id: 'REF-' + Math.floor(100000 + Math.random() * 900000),
-      api_used: settings.selected_provider || 'Mock'
-    };
-
-    if (hasCredits) {
-      localStorage.setItem('sms_wallet', (wallet - 1).toString());
-    }
-
-    const logs = mockDb.getSMSLogs();
-    logs.unshift(newLog);
-    localStorage.setItem('sms_logs', JSON.stringify(logs));
-  },
-
-  // General helpers
+  // LEDGER BALANCES CALCULATORS
   getMemberSavingsBalance: (memberId: string): number => {
     const txs = mockDb.getTransactions(memberId);
-    return txs.reduce((bal, tx) => {
-      if (tx.type === 'deposit' || tx.type === 'dividend') return bal + tx.amount;
-      if (tx.type === 'withdrawal') return bal - tx.amount;
+    return txs.reduce((bal, t) => {
+      if (t.type === 'deposit') return bal + t.amount;
+      if (t.type === 'withdrawal') return bal - t.amount;
       return bal;
     }, 0);
   },
 
   getMemberSharesBalance: (memberId: string): number => {
     const txs = mockDb.getTransactions(memberId);
-    return txs.reduce((bal, tx) => {
-      if (tx.type === 'share_purchase') return bal + tx.amount;
+    return txs.reduce((bal, t) => {
+      if (t.type === 'share_purchase') return bal + t.amount;
       return bal;
     }, 0);
   },
 
-  getMemberLoansBalance: (memberId: string): number => {
+  getOutstandingLoansBalance: (memberId: string): number => {
     const loans = mockDb.getLoans(memberId);
     return loans.reduce((bal, l) => {
       if (l.status === 'disbursed' || l.status === 'active') return bal + l.outstanding_balance;
@@ -997,16 +898,102 @@ export const mockDb = {
     }, 0);
   },
 
+  getMemberLoansBalance: (memberId: string): number => {
+    return mockDb.getOutstandingLoansBalance(memberId);
+  },
+
+  sendSMSManual: async (
+    memberId: string,
+    templateId: string,
+    customMsg: string,
+    operator: { name: string; email: string; role: string }
+  ) => {
+    const member = mockDb.getMembers().find(m => m.id === memberId);
+    if (!member) throw new Error('Member not found');
+
+    const templatesList = mockDb.getSMSTemplates();
+    const template = templatesList.find(t => t.id === templateId || t.name === templateId || t.event === templateId);
+    const event = template ? template.event : 'Normal Notification';
+    
+    let message = customMsg;
+    if (!message && template) {
+      const balance = mockDb.getMemberSavingsBalance(memberId);
+      const loanBal = mockDb.getMemberLoansBalance(memberId);
+      message = mockDb.parseSMSPlaceholders(template.body, member, 0, balance, loanBal, 0);
+    } else if (!message) {
+      message = 'Hello, this is a standard notification from Mustard Seed.';
+    }
+
+    const logId = 'sms_log_' + generateId();
+    const newLog: SMSLog = {
+      id: logId,
+      timestamp: getNowString(),
+      recipient_name: member.full_name,
+      recipient_phone: member.phone_number,
+      message,
+      event,
+      status: 'Delivered',
+      reference_id: 'REF_' + Math.floor(100000 + Math.random() * 900000),
+      api_used: 'Arkesel Gateway'
+    };
+
+    const logs = mockDb.getSMSLogs();
+    logs.unshift(newLog);
+    localStorage.setItem('sms_logs', JSON.stringify(logs));
+
+    // Deduct 1 SMS credit (0.10 GHS)
+    const currentWallet = mockDb.getSMSWallet();
+    const nextWallet = Math.max(0, currentWallet - 0.10);
+    localStorage.setItem('sms_wallet', nextWallet.toString());
+
+    mockDb.logAudit(operator, 'Send SMS Notification', 'SMS', logId, 'Wallet Deduction: 0.10 GHS', `Message: "${message}"`);
+
+    // Sync to Supabase
+    await supabase.from('sms_logs').insert(newLog);
+    return newLog;
+  },
+
+  deleteSMSTemplate: (id: string, operator: { name: string; email: string; role: string }) => {
+    const list = mockDb.getSMSTemplates();
+    const filtered = list.filter(t => t.id !== id);
+    localStorage.setItem('sms_templates', JSON.stringify(filtered));
+    mockDb.logAudit(operator, 'Delete SMS Template', 'SMS', id, 'Template', 'Deleted');
+
+    supabase.from('sms_templates').delete().eq('id', id).then();
+  },
+
+  parseSMSPlaceholders: (
+    templateBody: string,
+    member: Member,
+    amount?: number,
+    balance?: number,
+    loanAmount?: number,
+    interest?: number
+  ): string => {
+    let result = templateBody;
+    result = result.replace(/{full_name}/g, member.full_name);
+    result = result.replace(/{account_number}/g, member.account_number);
+    result = result.replace(/{amount}/g, amount !== undefined ? amount.toFixed(2) : '0.00');
+    result = result.replace(/{balance}/g, balance !== undefined ? balance.toFixed(2) : '0.00');
+    result = result.replace(/{loan_amount}/g, loanAmount !== undefined ? loanAmount.toFixed(2) : '0.00');
+    result = result.replace(/{interest}/g, interest !== undefined ? interest.toString() : '0');
+    return result;
+  },
+
   updateCOABalance: (accountNo: number, amount: number) => {
     const coa = mockDb.getCOA();
     const idx = coa.findIndex(a => a.account_no === accountNo);
     if (idx !== -1) {
-      coa[idx].balance = Number((coa[idx].balance + amount).toFixed(2));
+      const balance = Number((coa[idx].balance + amount).toFixed(2));
+      coa[idx].balance = balance;
       localStorage.setItem('chart_of_accounts', JSON.stringify(coa));
+
+      // Sync to Supabase
+      supabase.from('chart_of_accounts').update({ balance }).eq('account_no', accountNo).then();
     }
   },
 
-  resetDatabase: () => {
+  resetDatabase: async () => {
     localStorage.removeItem('congregations');
     localStorage.removeItem('members');
     localStorage.removeItem('beneficiaries');
@@ -1022,6 +1009,30 @@ export const mockDb = {
     localStorage.removeItem('sms_wallet');
     localStorage.removeItem('sms_settings');
     localStorage.removeItem('momo_transactions');
+    
+    // Clear Supabase transactional tables
+    try {
+      await supabase.from('congregations').delete().neq('id', 'placeholder');
+      await supabase.from('members').delete().neq('id', 'placeholder');
+      await supabase.from('beneficiaries').delete().neq('id', 'placeholder');
+      await supabase.from('transactions').delete().neq('id', 'placeholder');
+      await supabase.from('loans').delete().neq('id', 'placeholder');
+      await supabase.from('guarantors').delete().neq('id', 'placeholder');
+      await supabase.from('sms_logs').delete().neq('id', 'placeholder');
+      await supabase.from('audit_logs').delete().neq('id', 'placeholder');
+      await supabase.from('journal_entries').delete().neq('id', 'placeholder');
+      await supabase.from('momo_transactions').delete().neq('id', 'placeholder');
+      
+      // Reset COA balances to 0 in Supabase
+      const coaList = INITIAL_COA;
+      for (const item of coaList) {
+        await supabase.from('chart_of_accounts').update({ balance: 0 }).eq('account_no', item.account_no);
+      }
+    } catch (e) {
+      console.warn("Supabase Reset Warning:", e);
+    }
+    
     mockDb.initialize();
+    await mockDb.syncFromSupabase();
   }
 };
