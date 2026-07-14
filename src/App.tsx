@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { mockDb } from './db/mockDb';
-import type { Member, Beneficiary, Transaction, Loan, SMSLog, SMSTemplate, AuditLog, AccountCOA, JournalEntry, MobileMoneyTransaction } from './db/supabase';
+import type { Member, Beneficiary, Transaction, Loan, SMSLog, SMSTemplate, AuditLog, AccountCOA, JournalEntry, MobileMoneyTransaction, Congregation, Guarantor } from './db/supabase';
 
 // Components
 import { Dashboard } from './components/Dashboard';
+import { CongregationManagement } from './components/CongregationManagement';
 import { MemberManagement } from './components/MemberManagement';
 import { SavingsManagement } from './components/SavingsManagement';
+import { WithdrawalManagement } from './components/WithdrawalManagement';
 import { LoanManagement } from './components/LoanManagement';
+import { GuarantorManagement } from './components/GuarantorManagement';
 import { SharesManagement } from './components/SharesManagement';
 import { AccountingFinance } from './components/AccountingFinance';
 import { MoMoIntegration } from './components/MoMoIntegration';
@@ -14,8 +17,9 @@ import { SMSNotification } from './components/SMSNotification';
 import { SecurityAudit } from './components/SecurityAudit';
 
 import { 
-  Users, PiggyBank, Landmark, TrendingUp, DollarSign, 
-  MessageSquare, ShieldCheck, Sun, Moon, Menu, Landmark as BankIcon
+  Users, CreditCard, Landmark, TrendingUp, DollarSign, 
+  MessageSquare, ShieldCheck, Sun, Moon, Menu, Landmark as BankIcon, 
+  ArrowUpRight, ArrowDownRight, UserCheck, ShieldAlert
 } from 'lucide-react';
 
 function App() {
@@ -28,10 +32,12 @@ function App() {
   const [selectedTab, setSelectedTab] = useState<string>('dashboard');
 
   // Database States
+  const [congregations, setCongregations] = useState<Congregation[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loans, setLoans] = useState<Loan[]>([]);
+  const [guarantors, setGuarantors] = useState<Guarantor[]>([]);
   const [templates, setTemplates] = useState<SMSTemplate[]>([]);
   const [smsLogs, setSmsLogs] = useState<SMSLog[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -47,10 +53,12 @@ function App() {
   }, []);
 
   const refreshLocalState = () => {
+    setCongregations(mockDb.getCongregations());
     setMembers(mockDb.getMembers());
     setBeneficiaries(mockDb.getBeneficiaries());
     setTransactions(mockDb.getTransactions());
     setLoans(mockDb.getLoans());
+    setGuarantors(mockDb.getGuarantors());
     setTemplates(mockDb.getSMSTemplates());
     setSmsLogs(mockDb.getSMSLogs());
     setAuditLogs(mockDb.getAuditLogs());
@@ -67,7 +75,18 @@ function App() {
     document.documentElement.setAttribute('data-theme', nextTheme);
   };
 
-  // 1. Members mutations
+  // 1. Congregation mutations
+  const handleSaveCongregation = (name: string, id?: string) => {
+    mockDb.saveCongregation(name, id, { role: userRole, name: `${userRole} (Admin)` });
+    refreshLocalState();
+  };
+
+  const handleDeleteCongregation = (id: string) => {
+    mockDb.deleteCongregation(id, { role: userRole, name: `${userRole} (Admin)` });
+    refreshLocalState();
+  };
+
+  // 2. Members mutations
   const handleAddMember = (
     memberData: Omit<Member, 'id' | 'account_number' | 'created_at'>,
     beneficiariesData: Omit<Beneficiary, 'id' | 'member_id'>[]
@@ -76,14 +95,23 @@ function App() {
     refreshLocalState();
   };
 
-  // 2. Transaction mutations
-  const handlePostTransaction = (txData: { member_id: string; type: 'deposit' | 'withdrawal' | 'share_purchase'; amount: number; description: string }) => {
-    mockDb.postTransaction(txData, { role: userRole, name: `${userRole} User` });
+  const handleEditMember = (
+    id: string,
+    memberData: Omit<Member, 'id' | 'account_number' | 'created_at'>,
+    beneficiariesData: Omit<Beneficiary, 'id' | 'member_id'>[]
+  ) => {
+    mockDb.editMember(id, memberData, beneficiariesData, { role: userRole, name: `${userRole} (Admin)` });
     refreshLocalState();
   };
 
-  // 3. Loans mutations
-  const handleApplyLoan = (loanData: Omit<Loan, 'id' | 'status' | 'monthly_installment' | 'outstanding_balance' | 'created_at'>) => {
+  // 3. Transaction mutations (deposit, withdrawal, share_purchase)
+  const handlePostTransaction = (txData: { member_id: string; type: 'deposit' | 'withdrawal' | 'share_purchase'; amount: number; description: string; reference?: string; notes?: string }) => {
+    mockDb.postTransaction(txData, { role: userRole, name: `${userRole} Operator` });
+    refreshLocalState();
+  };
+
+  // 4. Loans mutations
+  const handleApplyLoan = (loanData: { member_id: string; member_name: string; principal: number; interest_rate: number; term_months: number; purpose: string; collateral: string }) => {
     mockDb.applyForLoan(loanData, { role: userRole, name: `${userRole} User` });
     refreshLocalState();
   };
@@ -98,31 +126,38 @@ function App() {
     refreshLocalState();
   };
 
-  // 4. Shares & Dividends mutations
+  // 5. Guarantor mutations
+  const handleAddGuarantor = (guarantorData: { loan_id: string; member_id?: string; full_name: string; phone_number: string; relationship: string; amount: number }) => {
+    mockDb.saveGuarantor(guarantorData, { role: userRole, name: `${userRole} Operator` });
+    refreshLocalState();
+  };
+
+  // 6. Shares & Dividends mutations
   const handleDistributeDividends = (percentage: number) => {
     mockDb.distributeDividends(percentage, { role: userRole, name: `${userRole} Accountant` });
     refreshLocalState();
   };
 
-  // 5. Journal posting mutations
+  // 7. Journal posting mutations
   const handlePostJournalEntry = (entry: Omit<JournalEntry, 'id' | 'date'>) => {
     mockDb.postJournalVoucher(entry, { role: userRole, name: `${userRole} Accountant` });
     refreshLocalState();
   };
 
-  // 6. MoMo mutations
-  const handleCreateMoMo = (tx: Omit<MobileMoneyTransaction, 'id' | 'status' | 'timestamp' | 'reference'>) => {
-    const res = mockDb.createMoMoTransaction(tx);
+  const handleCreateMoMo = (tx: { direction: 'collection' | 'payout'; network: string; member_id?: string; amount: number; phone_number: string; purpose: string; reference: string }) => {
+    mockDb.createMoMoTransaction({
+      type: tx.direction,
+      network: tx.network,
+      member_id: tx.member_id,
+      amount: tx.amount,
+      phone_number: tx.phone_number,
+      purpose: tx.purpose,
+      reference: tx.reference
+    }, { role: userRole, name: `${userRole} Operator` });
     refreshLocalState();
-    return res;
   };
 
-  const handleProcessMoMo = (id: string, success: boolean) => {
-    mockDb.processMoMoTransaction(id, success, { role: userRole, name: `${userRole} Operator` });
-    refreshLocalState();
-  };
-
-  // 7. SMS notifications mutations
+  // 9. SMS notifications mutations
   const handleUpdateTemplate = (type: string, content: string) => {
     mockDb.saveSMSTemplate(type, content, { role: userRole, name: `${userRole} Operator` });
     refreshLocalState();
@@ -138,7 +173,7 @@ function App() {
     refreshLocalState();
   };
 
-  // 8. Database reset
+  // 10. Database reset
   const handleResetDb = () => {
     mockDb.resetDatabase();
     refreshLocalState();
@@ -150,13 +185,12 @@ function App() {
     
     switch (tab) {
       case 'dashboard':
-        return true;
+      case 'congregations':
       case 'members':
-        return true; // All roles can see members, but Member role gets read-only detail views
-      case 'savings':
-        return true; // Members can see statements, officers can post
+      case 'deposits':
+      case 'withdrawals':
       case 'loans':
-        return true;
+      case 'guarantors':
       case 'shares':
         return true;
       case 'accounting':
@@ -184,14 +218,14 @@ function App() {
   return (
     <div className="app-container">
       
-      {/* 1. Mobile Shell Controls */}
+      {/* Mobile Shell Controls */}
       <div style={{ position: 'fixed', top: 15, left: 15, zIndex: 150, display: 'flex', gap: 10 }}>
         <button className="menu-toggle-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
           <Menu size={20} />
         </button>
       </div>
 
-      {/* 2. Main Navigation Sidebar */}
+      {/* Main Navigation Sidebar */}
       <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-logo">
           <div className="sidebar-logo-icon">MS</div>
@@ -210,48 +244,69 @@ function App() {
           </div>
 
           <div 
-            className={`sidebar-item ${selectedTab === 'members' ? 'active' : ''}`}
-            onClick={() => handleTabClick('members')}
+            className={`sidebar-item ${selectedTab === 'congregations' ? 'active' : ''}`}
+            onClick={() => handleTabClick('congregations')}
           >
-            <Users size={18} /> Member Directory
+            <UserCheck size={18} /> Congregations
           </div>
 
           <div 
-            className={`sidebar-item ${selectedTab === 'savings' ? 'active' : ''}`}
-            onClick={() => handleTabClick('savings')}
+            className={`sidebar-item ${selectedTab === 'members' ? 'active' : ''}`}
+            onClick={() => handleTabClick('members')}
           >
-            <PiggyBank size={18} /> Savings & Deposits
+            <Users size={18} /> Members
+          </div>
+
+          <div 
+            className={`sidebar-item ${selectedTab === 'deposits' ? 'active' : ''}`}
+            onClick={() => handleTabClick('deposits')}
+          >
+            <ArrowUpRight size={18} /> Deposits
+          </div>
+
+          <div 
+            className={`sidebar-item ${selectedTab === 'withdrawals' ? 'active' : ''}`}
+            onClick={() => handleTabClick('withdrawals')}
+          >
+            <ArrowDownRight size={18} /> Withdrawals
           </div>
 
           <div 
             className={`sidebar-item ${selectedTab === 'loans' ? 'active' : ''}`}
             onClick={() => handleTabClick('loans')}
           >
-            <Landmark size={18} /> Loans & Guarantors
+            <Landmark size={18} /> Loans
+          </div>
+
+          <div 
+            className={`sidebar-item ${selectedTab === 'guarantors' ? 'active' : ''}`}
+            onClick={() => handleTabClick('guarantors')}
+          >
+            <ShieldAlert size={18} /> Guarantors
           </div>
 
           <div 
             className={`sidebar-item ${selectedTab === 'shares' ? 'active' : ''}`}
             onClick={() => handleTabClick('shares')}
           >
-            <TrendingUp size={18} /> Share Capital
+            <TrendingUp size={18} /> Shares & Dividends
           </div>
-
-          {canAccessTab('accounting') && (
-            <div 
-              className={`sidebar-item ${selectedTab === 'accounting' ? 'active' : ''}`}
-              onClick={() => handleTabClick('accounting')}
-            >
-              <DollarSign size={18} /> Accounting ledger
-            </div>
-          )}
 
           {canAccessTab('momo') && (
             <div 
               className={`sidebar-item ${selectedTab === 'momo' ? 'active' : ''}`}
               onClick={() => handleTabClick('momo')}
             >
-              <DollarSign size={18} /> MoMo integration
+              <CreditCard size={18} /> Mobile Money
+            </div>
+          )}
+
+          {canAccessTab('accounting') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'accounting' ? 'active' : ''}`}
+              onClick={() => handleTabClick('accounting')}
+            >
+              <DollarSign size={18} /> Chart of Accounts
             </div>
           )}
 
@@ -260,7 +315,7 @@ function App() {
               className={`sidebar-item ${selectedTab === 'sms' ? 'active' : ''}`}
               onClick={() => handleTabClick('sms')}
             >
-              <MessageSquare size={18} /> SMS notifications
+              <MessageSquare size={18} /> SMS Notifications
             </div>
           )}
 
@@ -274,7 +329,6 @@ function App() {
           )}
         </div>
 
-        {/* Sidebar Footer detailing Active User Profile */}
         <div className="sidebar-footer">
           <div className="user-badge">
             <div className="user-badge-avatar">
@@ -288,10 +342,10 @@ function App() {
         </div>
       </div>
 
-      {/* 3. Main Dashboard Workspace Area */}
+      {/* Main Workspace Area */}
       <div className="main-content">
         
-        {/* Top Header: System Actions & Settings */}
+        {/* Top Header */}
         <div className="top-header">
           <div className="header-title-section">
             <h1 style={{ fontSize: '24px', margin: 0 }}>Mustard Seed Welfare Fund</h1>
@@ -299,14 +353,12 @@ function App() {
           </div>
 
           <div className="header-controls">
-            {/* Quick Switch Demo Bar */}
             <div className="flex align-center gap-8" style={{ borderRight: '1px solid var(--border)', paddingRight: '16px' }}>
               <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>DEMO ROLE:</span>
               <select 
                 value={userRole} 
                 onChange={(e) => {
                   setUserRole(e.target.value);
-                  // fallback to dashboard if role lost access
                   setSelectedTab('dashboard');
                 }}
                 style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid var(--border)', borderRadius: '6px' }}
@@ -315,14 +367,13 @@ function App() {
               </select>
             </div>
 
-            {/* Dark Mode Toggle */}
             <button className="btn btn-outline btn-icon-only" onClick={toggleTheme}>
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
             </button>
           </div>
         </div>
 
-        {/* 4. Active Tab Component Routing */}
+        {/* Tab Routing */}
         <div className="flex w-full">
           {selectedTab === 'dashboard' && (
             <Dashboard
@@ -338,19 +389,37 @@ function App() {
             />
           )}
 
-          {selectedTab === 'members' && (
-            <MemberManagement
-              members={members}
-              beneficiaries={beneficiaries}
-              onAddMember={handleAddMember}
+          {selectedTab === 'congregations' && (
+            <CongregationManagement
+              congregations={congregations}
+              onSaveCongregation={handleSaveCongregation}
+              onDeleteCongregation={handleDeleteCongregation}
               userRole={userRole}
             />
           )}
 
-          {selectedTab === 'savings' && (
+          {selectedTab === 'members' && (
+            <MemberManagement
+              members={members}
+              beneficiaries={beneficiaries}
+              congregations={congregations}
+              onAddMember={handleAddMember}
+              onEditMember={handleEditMember}
+              userRole={userRole}
+            />
+          )}
+
+          {selectedTab === 'deposits' && (
             <SavingsManagement
               members={members}
-              transactions={transactions}
+              onPostTransaction={handlePostTransaction}
+              userRole={userRole}
+            />
+          )}
+
+          {selectedTab === 'withdrawals' && (
+            <WithdrawalManagement
+              members={members}
               onPostTransaction={handlePostTransaction}
               userRole={userRole}
             />
@@ -367,6 +436,16 @@ function App() {
             />
           )}
 
+          {selectedTab === 'guarantors' && (
+            <GuarantorManagement
+              members={members}
+              loans={loans}
+              guarantors={guarantors}
+              onAddGuarantor={handleAddGuarantor}
+              userRole={userRole}
+            />
+          )}
+
           {selectedTab === 'shares' && (
             <SharesManagement
               members={members}
@@ -377,22 +456,21 @@ function App() {
             />
           )}
 
+          {selectedTab === 'momo' && canAccessTab('momo') && (
+            <MoMoIntegration
+              members={members}
+              momoTransactions={momoTransactions}
+              onCreateTransaction={handleCreateMoMo}
+              userRole={userRole}
+            />
+          )}
+
           {selectedTab === 'accounting' && canAccessTab('accounting') && (
             <AccountingFinance
               members={members}
               coa={coa}
               journalEntries={journalEntries}
               onPostJournalEntry={handlePostJournalEntry}
-              userRole={userRole}
-            />
-          )}
-
-          {selectedTab === 'momo' && canAccessTab('momo') && (
-            <MoMoIntegration
-              members={members}
-              momoTransactions={momoTransactions}
-              onCreateTransaction={handleCreateMoMo}
-              onProcessTransaction={handleProcessMoMo}
               userRole={userRole}
             />
           )}

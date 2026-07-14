@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import type { Member } from '../db/supabase';
 import { mockDb } from '../db/mockDb';
-import { Search, AlertCircle, CheckCircle, ArrowUpRight } from 'lucide-react';
+import { Search, ArrowDownRight, AlertCircle, CheckCircle } from 'lucide-react';
 
-interface SavingsManagementProps {
+interface WithdrawalManagementProps {
   members: Member[];
-  onPostTransaction: (txData: { member_id: string; type: 'deposit'; amount: number; description: string; reference?: string; notes?: string }) => void;
+  onPostTransaction: (txData: { member_id: string; type: 'withdrawal'; amount: number; description: string; reference?: string; notes?: string }) => void;
   userRole: string;
 }
 
-export const SavingsManagement: React.FC<SavingsManagementProps> = ({
+export const WithdrawalManagement: React.FC<WithdrawalManagementProps> = ({
   members,
   onPostTransaction,
   userRole
@@ -17,7 +17,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   
-  // Deposit Form state
+  // Withdrawal Form state
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
@@ -25,7 +25,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Filter members list
+  // Filter members list by Name or Account number
   const filteredMembers = members.filter(m => {
     const term = searchTerm.toLowerCase();
     return (
@@ -52,21 +52,27 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
 
     const numAmount = Number(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      setErrorMsg('Deposit amount must be a positive number.');
+      setErrorMsg('Withdrawal amount must be a positive number.');
+      return;
+    }
+
+    const availableBalance = mockDb.getMemberSavingsBalance(selectedMember.id);
+    if (availableBalance < numAmount) {
+      setErrorMsg(`Insufficient funds! Member available balance is GHS ${availableBalance.toFixed(2)}.`);
       return;
     }
 
     try {
       onPostTransaction({
         member_id: selectedMember.id,
-        type: 'deposit',
+        type: 'withdrawal',
         amount: numAmount,
-        description: 'Savings Deposit',
+        description: 'Savings Account Withdrawal',
         reference,
         notes
       });
 
-      setSuccessMsg('Deposit successfully processed and accounts updated!');
+      setSuccessMsg('Withdrawal successfully processed and accounts updated!');
       setAmount('');
       
       setTimeout(() => {
@@ -74,7 +80,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
         setSuccessMsg('');
       }, 1200);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Deposit failed.');
+      setErrorMsg(err.message || 'Withdrawal failed.');
     }
   };
 
@@ -84,8 +90,8 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
     <div className="flex flex-col gap-16 w-full">
       {/* Header bar */}
       <div>
-        <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--primary)' }}>Deposits Portal</h2>
-        <span className="text-muted" style={{ fontSize: '13px' }}>Select a member below to process a savings account deposit.</span>
+        <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--primary)' }}>Withdrawals Portal</h2>
+        <span className="text-muted" style={{ fontSize: '13px' }}>Select a member below to process a savings account withdrawal.</span>
       </div>
 
       {/* Search Input */}
@@ -109,7 +115,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
               <th>Member Name</th>
               <th>Phone Number</th>
               <th>Congregation</th>
-              <th className="text-right">Savings Balance</th>
+              <th className="text-right">Available Balance</th>
               {!isReadOnly && <th className="text-center">Action</th>}
             </tr>
           </thead>
@@ -122,13 +128,13 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
                   <td className="bold">{m.full_name}</td>
                   <td>{m.phone_number}</td>
                   <td>{m.congregation}</td>
-                  <td className="text-right bold" style={{ fontSize: '15px', color: 'var(--success)' }}>
+                  <td className="text-right bold" style={{ fontSize: '15px', color: 'var(--danger)' }}>
                     GHS {balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </td>
                   {!isReadOnly && (
                     <td className="text-center">
                       <button className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => handleOpenPopup(m)}>
-                        <ArrowUpRight size={14} style={{ marginRight: '4px' }} /> Deposit
+                        <ArrowDownRight size={14} style={{ marginRight: '4px' }} /> Withdraw
                       </button>
                     </td>
                   )}
@@ -144,12 +150,12 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
         </table>
       </div>
 
-      {/* Deposit Popup Modal */}
+      {/* Withdrawal Popup Modal */}
       {selectedMember && (
         <div className="modal-backdrop">
           <div className="modal-content">
             <div className="modal-header">
-              <h2 className="modal-title">Process Savings Deposit</h2>
+              <h2 className="modal-title">Process Savings Withdrawal</h2>
               <button className="modal-close" onClick={() => setSelectedMember(null)}>&times;</button>
             </div>
             
@@ -180,15 +186,15 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
                     <span className="bold" style={{ fontFamily: 'monospace' }}>{selectedMember.account_number}</span>
                   </div>
                   <div className="flex justify-between mt-8" style={{ borderTop: '1px dashed var(--border)', paddingTop: '8px', fontSize: '14px' }}>
-                    <span className="text-muted">Current Balance:</span>
-                    <span className="bold text-success">
+                    <span className="text-muted">Available Balance:</span>
+                    <span className="bold text-danger">
                       GHS {mockDb.getMemberSavingsBalance(selectedMember.id).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                 </div>
 
                 <div className="form-group">
-                  <label>Deposit Amount (GHS) *</label>
+                  <label>Withdrawal Amount (GHS) *</label>
                   <input
                     type="number"
                     value={amount}
@@ -217,7 +223,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
                       type="text"
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="e.g. Counter deposit"
+                      placeholder="e.g. Over the counter"
                     />
                   </div>
                 </div>
@@ -226,7 +232,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
               
               <div className="modal-footer">
                 <button type="button" className="btn btn-outline" onClick={() => setSelectedMember(null)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Confirm Deposit</button>
+                <button type="submit" className="btn btn-primary" style={{ background: 'var(--danger)' }}>Confirm Withdrawal</button>
               </div>
             </form>
           </div>

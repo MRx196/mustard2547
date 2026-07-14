@@ -20,6 +20,12 @@ const config = getSupabaseConfig();
 
 export const supabase = createClient(config.url, config.anonKey);
 
+export interface Congregation {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface Member {
   id: string;
   account_number: string; // Auto-generated like SDMS 0001, SDMS 0002
@@ -53,7 +59,7 @@ export interface Transaction {
   id: string;
   member_id: string;
   account_number: string;
-  type: 'deposit' | 'withdrawal' | 'share_purchase' | 'dividend' | 'loan_disbursement' | 'loan_repayment';
+  type: 'deposit' | 'withdrawal' | 'share_purchase' | 'dividend' | 'loan_disbursement' | 'loan_repayment' | 'momo_in' | 'momo_out';
   amount: number;
   date: string;
   description: string;
@@ -67,8 +73,8 @@ export interface Loan {
   principal: number;
   interest_rate: number;
   term_months: number;
-  guarantor_id: string;
-  guarantor_name: string;
+  guarantor_id?: string; // Optional if using custom guarantors table
+  guarantor_name?: string;
   status: 'pending' | 'approved' | 'rejected' | 'disbursed' | 'active' | 'repaid';
   collateral: string;
   monthly_installment: number;
@@ -76,6 +82,18 @@ export interface Loan {
   created_at: string;
 }
 
+export interface Guarantor {
+  id: string;
+  loan_id: string;
+  member_id?: string; // Optional link to existing member
+  full_name: string;
+  phone_number: string;
+  relationship: string;
+  amount: number;
+  created_at: string;
+}
+
+// Keeping SMS and bookkeeping types in alignment
 export interface SMSLog {
   id: string;
   member_id?: string;
@@ -118,11 +136,13 @@ export interface JournalEntry {
 
 export interface MobileMoneyTransaction {
   id: string;
-  member_id: string;
-  member_name: string;
+  member_id?: string; // Optional
+  member_name?: string;
   phone_number: string;
   amount: number;
-  type: 'collection' | 'payout';
+  type: 'collection' | 'payout'; // Collection In vs Payout Out
+  network: string;
+  purpose: string; // Savings Deposit, Loan Repayment, Shares Purchase, Payment to Member, Other
   status: 'pending' | 'success' | 'failed';
   timestamp: string;
   reference: string;

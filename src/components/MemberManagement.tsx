@@ -1,25 +1,32 @@
 import React, { useState } from 'react';
-import type { Member, Beneficiary } from '../db/supabase';
-import { Plus, Search, View, AlertCircle, Trash2, CheckCircle } from 'lucide-react';
+import type { Member, Beneficiary, Congregation } from '../db/supabase';
+import { Plus, Search, Edit, AlertCircle, Trash2, CheckCircle, Printer } from 'lucide-react';
 
 interface MemberManagementProps {
   members: Member[];
   beneficiaries: Beneficiary[];
+  congregations: Congregation[];
   onAddMember: (member: Omit<Member, 'id' | 'account_number' | 'created_at'>, beneficiaries: Omit<Beneficiary, 'id' | 'member_id'>[]) => void;
+  onEditMember: (id: string, member: Omit<Member, 'id' | 'account_number' | 'created_at'>, beneficiaries: Omit<Beneficiary, 'id' | 'member_id'>[]) => void;
   userRole: string;
 }
 
 export const MemberManagement: React.FC<MemberManagementProps> = ({
   members,
   beneficiaries,
+  congregations,
   onAddMember,
+  onEditMember,
   userRole
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
 
   // Form State
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
   const [gender, setGender] = useState('Male');
   const [dob, setDob] = useState('');
@@ -32,7 +39,7 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
   const [occupation, setOccupation] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
 
-  // Beneficiaries State (pre-populate with 5 empty rows to encourage filling 5)
+  // Beneficiaries State
   const emptyBeneficiary = {
     full_name: '',
     age: 0,
@@ -54,18 +61,16 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Auto-calculated next account number
   const nextAccountNumber = `SDMS ${String(members.length + 1).padStart(4, '0')}`;
 
-  // Filtering
+  // Filter
   const filteredMembers = members.filter(m => {
     const term = searchTerm.toLowerCase();
     return (
       m.full_name.toLowerCase().includes(term) ||
       m.account_number.toLowerCase().includes(term) ||
       m.phone_number.toLowerCase().includes(term) ||
-      m.congregation.toLowerCase().includes(term) ||
-      (m.group_name && m.group_name.toLowerCase().includes(term))
+      m.congregation.toLowerCase().includes(term)
     );
   });
 
@@ -86,34 +91,79 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
     setBeneficiariesForm(updated);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Open Edit Mode
+  const handleOpenEdit = (m: Member) => {
+    setEditingId(m.id);
+    setFullName(m.full_name);
+    setGender(m.gender);
+    setDob(m.dob);
+    setMaritalStatus(m.marital_status);
+    setHouseNoGps(m.house_no_gps);
+    setLandmark(m.landmark);
+    setCongregation(m.congregation);
+    setEmail(m.email || '');
+    setGroupName(m.group_name || '');
+    setOccupation(m.occupation);
+    setPhoneNumber(m.phone_number);
+
+    // Get matching beneficiaries
+    const activeB = beneficiaries.filter(b => b.member_id === m.id).map(b => ({
+      full_name: b.full_name,
+      age: b.age,
+      percentage: b.percentage,
+      house_number: b.house_number,
+      marital_status: b.marital_status,
+      relationship: b.relationship,
+      phone_number: b.phone_number
+    }));
+
+    // Prepopulate at least 5
+    if (activeB.length === 0) {
+      setBeneficiariesForm([
+        { ...emptyBeneficiary, relationship: 'Spouse', percentage: 40 },
+        { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
+        { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
+        { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
+        { ...emptyBeneficiary, relationship: 'Sister', percentage: 15 }
+      ]);
+    } else {
+      setBeneficiariesForm(activeB);
+    }
+
+    setErrorMsg('');
+    setSuccessMsg('');
+    setShowEditModal(true);
+  };
+
+  const handleOpenPrint = (m: Member) => {
+    setSelectedMember(m);
+    setShowPrintModal(true);
+  };
+
+  const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
 
-    // Validation checks
     if (!fullName || !dob || !houseNoGps || !landmark || !congregation || !occupation || !phoneNumber) {
-      setErrorMsg('Please fill in all required personal details fields.');
+      setErrorMsg('Please fill in all required member details fields.');
       return;
     }
 
-    // Check at least 5 beneficiaries
     const activeBeneficiaries = beneficiariesForm.filter(b => b.full_name.trim() !== '');
     if (activeBeneficiaries.length < 5) {
-      setErrorMsg('Requirement violation: At least 5 beneficiary nominations are required for registration.');
+      setErrorMsg('Requirement violation: At least 5 beneficiary nominations are required.');
       return;
     }
 
-    // Check sum of percentages is exactly 100%
     const totalPct = activeBeneficiaries.reduce((sum, b) => sum + b.percentage, 0);
     if (Math.abs(totalPct - 100) > 0.01) {
       setErrorMsg(`Total percentage allocation must sum to exactly 100%. Current sum: ${totalPct}%`);
       return;
     }
 
-    // Submit
-    onAddMember(
-      {
+    try {
+      const pkg = {
         full_name: fullName,
         gender,
         dob,
@@ -125,67 +175,78 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
         group_name: groupName,
         occupation,
         phone_number: phoneNumber
-      },
-      activeBeneficiaries
-    );
+      };
 
-    // Reset Form
-    setFullName('');
-    setGender('Male');
-    setDob('');
-    setMaritalStatus('Single');
-    setHouseNoGps('');
-    setLandmark('');
-    setCongregation('');
-    setEmail('');
-    setGroupName('');
-    setOccupation('');
-    setPhoneNumber('');
-    setBeneficiariesForm([
-      { ...emptyBeneficiary, relationship: 'Spouse', percentage: 40 },
-      { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-      { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-      { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
-      { ...emptyBeneficiary, relationship: 'Sister', percentage: 15 }
-    ]);
-    
-    setSuccessMsg('Member registered successfully!');
-    setTimeout(() => {
-      setShowAddModal(false);
-      setSuccessMsg('');
-    }, 1500);
+      if (showEditModal && editingId) {
+        onEditMember(editingId, pkg, activeBeneficiaries);
+        setSuccessMsg('Member profile updated successfully!');
+      } else {
+        onAddMember(pkg, activeBeneficiaries);
+        setSuccessMsg('Member registered successfully!');
+      }
+
+      setTimeout(() => {
+        setShowAddModal(false);
+        setShowEditModal(false);
+        setSuccessMsg('');
+      }, 1200);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Operation failed.');
+    }
+  };
+
+  const handlePrintTrigger = () => {
+    window.print();
   };
 
   const isReadOnly = userRole === 'Member' || userRole === 'Collection Officer';
 
   return (
     <div className="flex flex-col gap-16 w-full">
-      {/* Search and Action Bar */}
+      {/* Action Bar */}
       <div className="flex justify-between align-center" style={{ flexWrap: 'wrap', gap: '12px' }}>
         <div className="flex align-center gap-8" style={{ background: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border)', width: '320px' }}>
           <Search size={18} className="text-muted" />
           <input
             type="text"
-            placeholder="Search members, accounts..."
+            placeholder="Search by name, account number..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ border: 'none', padding: 0, outline: 'none', width: '100%', background: 'transparent' }}
           />
         </div>
         {!isReadOnly && (
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+          <button className="btn btn-primary" onClick={() => {
+            setEditingId(null);
+            setFullName('');
+            setHouseNoGps('');
+            setLandmark('');
+            setCongregation(congregations[0]?.name || '');
+            setPhoneNumber('');
+            setOccupation('');
+            setBeneficiariesForm([
+              { ...emptyBeneficiary, relationship: 'Spouse', percentage: 40 },
+              { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
+              { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
+              { ...emptyBeneficiary, relationship: 'Child', percentage: 15 },
+              { ...emptyBeneficiary, relationship: 'Sister', percentage: 15 }
+            ]);
+            setErrorMsg('');
+            setSuccessMsg('');
+            setShowAddModal(true);
+          }}>
             <Plus size={18} /> Register Member
           </button>
         )}
       </div>
 
-      {/* Main Directory Table */}
+      {/* Directory Grid */}
       <div className="table-container">
         <table>
           <thead>
             <tr>
-              <th>Account Number</th>
-              <th>Full Name</th>
+              <th>Account Code</th>
+              <th>Member Name</th>
               <th>Phone Number</th>
               <th>Congregation</th>
               <th>Group Fellowship</th>
@@ -206,109 +267,130 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                 <td>{m.group_name || 'N/A'}</td>
                 <td>{new Date(m.created_at).toLocaleDateString()}</td>
                 <td className="text-center">
-                  <button className="btn btn-outline" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => setSelectedMember(m)}>
-                    <View size={14} style={{ marginRight: '4px' }} /> View Profile
-                  </button>
+                  <div className="flex gap-8 justify-center">
+                    <button className="btn btn-outline" style={{ padding: '6px 10px', fontSize: '12px' }} onClick={() => handleOpenPrint(m)}>
+                      <Printer size={14} style={{ marginRight: '4px' }} /> Print
+                    </button>
+                    {!isReadOnly && (
+                      <button className="btn btn-outline" style={{ padding: '6px 10px', fontSize: '12px', borderColor: 'var(--secondary)' }} onClick={() => handleOpenEdit(m)}>
+                        <Edit size={14} style={{ marginRight: '4px' }} /> Edit
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
             {filteredMembers.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center p-16 text-muted">No members found matching your search.</td>
+                <td colSpan={7} className="text-center p-16 text-muted">No members found matching query filters.</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Profile Detail Dialog */}
-      {selectedMember && (
-        <div className="modal-backdrop" onClick={() => setSelectedMember(null)}>
-          <div className="modal-content" style={{ maxWidth: '700px' }} onClick={(e) => e.stopPropagation()}>
+      {/* Profile summary modal layout optimized for PDF generation / Printing */}
+      {showPrintModal && selectedMember && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: '750px' }}>
             <div className="modal-header">
-              <h2 className="modal-title">Member Profile: {selectedMember.account_number}</h2>
-              <button className="modal-close" onClick={() => setSelectedMember(null)}>&times;</button>
+              <h2 className="modal-title">Registration Summary (Acc: {selectedMember.account_number})</h2>
+              <button className="modal-close" onClick={() => setShowPrintModal(false)}>&times;</button>
             </div>
-            
-            <div className="flex flex-col gap-16" style={{ fontSize: '14px' }}>
-              <div className="grid-2col" style={{ gap: '16px' }}>
+
+            {/* Document Frame */}
+            <div className="print-only-section print-preview-frame">
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '3px solid var(--primary)', paddingBottom: '16px', marginBottom: '24px' }}>
                 <div>
-                  <h4 style={{ borderBottom: '1px solid var(--border)', paddingBottom: '4px', margin: '0 0 10px 0' }}>Personal Particulars</h4>
-                  <div className="flex flex-col gap-8">
-                    <div><span className="text-muted">Full Name:</span> <span className="bold">{selectedMember.full_name}</span></div>
-                    <div><span className="text-muted">Gender:</span> <span>{selectedMember.gender}</span></div>
-                    <div><span className="text-muted">Date of Birth:</span> <span>{selectedMember.dob}</span></div>
-                    <div><span className="text-muted">Marital Status:</span> <span>{selectedMember.marital_status}</span></div>
-                    <div><span className="text-muted">Occupation:</span> <span>{selectedMember.occupation}</span></div>
-                  </div>
+                  <h2 style={{ margin: 0, color: 'var(--primary)', fontFamily: 'var(--display)', fontSize: '22px' }}>MUSTARD SEED WELFARE FUND</h2>
+                  <span style={{ fontSize: '10px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 'bold' }}>SEGE DISTRICT CREDIT UNION</span>
                 </div>
-                <div>
-                  <h4 style={{ borderBottom: '1px solid var(--border)', paddingBottom: '4px', margin: '0 0 10px 0' }}>Contact & Location</h4>
-                  <div className="flex flex-col gap-8">
-                    <div><span className="text-muted">Phone Number:</span> <span>{selectedMember.phone_number}</span></div>
-                    <div><span className="text-muted">Email Address:</span> <span>{selectedMember.email || 'N/A'}</span></div>
-                    <div><span className="text-muted">Congregation:</span> <span>{selectedMember.congregation}</span></div>
-                    <div><span className="text-muted">House GPS:</span> <span style={{ fontFamily: 'monospace' }}>{selectedMember.house_no_gps}</span></div>
-                    <div><span className="text-muted">Landmark:</span> <span>{selectedMember.landmark}</span></div>
-                  </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="bold" style={{ color: 'var(--primary)' }}>MEMBER CARD RECORD</div>
+                  <div style={{ fontSize: '12px', fontFamily: 'monospace' }}>Date: {new Date().toLocaleDateString()}</div>
                 </div>
               </div>
 
-              <div style={{ marginTop: '16px' }}>
-                <h4 style={{ borderBottom: '1px solid var(--border)', paddingBottom: '4px', margin: '0 0 10px 0' }}>Beneficiary Nominations</h4>
-                <div className="table-container" style={{ maxHeight: '250px' }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Beneficiary Name</th>
-                        <th>Relationship</th>
-                        <th>Age</th>
-                        <th>Share (%)</th>
-                        <th>Phone</th>
-                        <th>GPS Location</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {beneficiaries
-                        .filter(b => b.member_id === selectedMember.id)
-                        .map(b => (
-                          <tr key={b.id}>
-                            <td className="bold">{b.full_name}</td>
-                            <td>{b.relationship}</td>
-                            <td>{b.age} years</td>
-                            <td className="bold" style={{ color: 'var(--primary)' }}>{b.percentage}%</td>
-                            <td>{b.phone_number}</td>
-                            <td style={{ fontSize: '11px', fontFamily: 'monospace' }}>{b.house_number}</td>
-                          </tr>
-                        ))}
-                      {beneficiaries.filter(b => b.member_id === selectedMember.id).length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="text-center text-muted">No beneficiaries nominated.</td>
+              {/* Grid Profile info */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', fontSize: '13px', marginBottom: '24px' }}>
+                <div>
+                  <div><span style={{ color: '#64748b' }}>Account Number:</span> <span className="bold">{selectedMember.account_number}</span></div>
+                  <div className="mt-8"><span style={{ color: '#64748b' }}>Full Name:</span> <span className="bold">{selectedMember.full_name}</span></div>
+                  <div className="mt-8"><span style={{ color: '#64748b' }}>Gender:</span> <span>{selectedMember.gender}</span></div>
+                  <div className="mt-8"><span style={{ color: '#64748b' }}>Date of Birth:</span> <span>{selectedMember.dob}</span></div>
+                  <div className="mt-8"><span style={{ color: '#64748b' }}>Marital Status:</span> <span>{selectedMember.marital_status}</span></div>
+                </div>
+                <div>
+                  <div><span style={{ color: '#64748b' }}>Phone Number:</span> <span>{selectedMember.phone_number}</span></div>
+                  <div className="mt-8"><span style={{ color: '#64748b' }}>Email:</span> <span>{selectedMember.email || 'N/A'}</span></div>
+                  <div className="mt-8"><span style={{ color: '#64748b' }}>GPS Address:</span> <span style={{ fontFamily: 'monospace' }}>{selectedMember.house_no_gps}</span></div>
+                  <div className="mt-8"><span style={{ color: '#64748b' }}>Landmark:</span> <span>{selectedMember.landmark}</span></div>
+                  <div className="mt-8"><span style={{ color: '#64748b' }}>Congregation:</span> <span>{selectedMember.congregation}</span></div>
+                </div>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', marginBottom: '24px' }}>
+                <h4 style={{ margin: '0 0 12px 0', color: 'var(--primary)' }}>Nominated Beneficiaries</h4>
+                <table style={{ width: '100%', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc' }}>
+                      <th style={{ padding: '8px' }}>Name</th>
+                      <th style={{ padding: '8px' }}>Relationship</th>
+                      <th style={{ padding: '8px' }}>Age</th>
+                      <th style={{ padding: '8px' }}>Share (%)</th>
+                      <th style={{ padding: '8px' }}>Phone Target</th>
+                      <th style={{ padding: '8px' }}>GPS Address</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {beneficiaries
+                      .filter(b => b.member_id === selectedMember.id)
+                      .map((b, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                          <td style={{ padding: '8px' }} className="bold">{b.full_name}</td>
+                          <td style={{ padding: '8px' }}>{b.relationship}</td>
+                          <td style={{ padding: '8px' }}>{b.age} yrs</td>
+                          <td style={{ padding: '8px' }} className="bold text-success">{b.percentage}%</td>
+                          <td style={{ padding: '8px' }}>{b.phone_number}</td>
+                          <td style={{ padding: '8px', fontSize: '10px', fontFamily: 'monospace' }}>{b.house_number}</td>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#64748b' }}>
+                <div style={{ textAlign: 'center', width: '200px', borderTop: '1px solid #94a3b8', paddingTop: '8px' }}>
+                  Member's Signature
+                </div>
+                <div style={{ textAlign: 'center', width: '200px', borderTop: '1px solid #94a3b8', paddingTop: '8px' }}>
+                  Authorized Officer
                 </div>
               </div>
             </div>
-            
+
             <div className="modal-footer">
-              <button className="btn btn-primary" onClick={() => setSelectedMember(null)}>Close</button>
+              <button type="button" className="btn btn-outline" onClick={() => setShowPrintModal(false)}>Close</button>
+              <button type="button" className="btn btn-primary" onClick={handlePrintTrigger}>
+                <Printer size={16} /> Print Profile PDF
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Add Member Modal */}
-      {showAddModal && (
+      {/* Add / Edit Member Modal */}
+      {(showAddModal || showEditModal) && (
         <div className="modal-backdrop">
           <div className="modal-content" style={{ maxWidth: '850px' }}>
             <div className="modal-header">
-              <h2 className="modal-title">Register New Member (Next Acc: {nextAccountNumber})</h2>
-              <button className="modal-close" onClick={() => setShowAddModal(false)}>&times;</button>
+              <h2 className="modal-title">
+                {showEditModal ? 'Edit Member Profile' : `Register New Member (Next Acc: ${nextAccountNumber})`}
+              </h2>
+              <button className="modal-close" onClick={() => { setShowAddModal(false); setShowEditModal(false); }}>&times;</button>
             </div>
-            
-            <form onSubmit={handleSubmit}>
+
+            <form onSubmit={handleSave}>
               <div className="flex flex-col gap-16">
                 
                 {errorMsg && (
@@ -325,14 +407,14 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                   </div>
                 )}
 
-                {/* Section 1: Personal Details */}
-                <h3 style={{ margin: '0 0 8px 0', borderBottom: '2px solid var(--primary)', paddingBottom: '4px', fontSize: '16px' }}>
+                <h3 style={{ margin: '0 0 8px 0', borderBottom: '2px solid var(--primary)', paddingBottom: '4px', fontSize: '16px', color: 'var(--primary)' }}>
                   Personal Information
                 </h3>
+
                 <div className="form-row">
                   <div className="form-group">
                     <label>Full Name *</label>
-                    <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter Full Name" required />
+                    <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Full Name" required />
                   </div>
                   <div className="form-group">
                     <label>Gender *</label>
@@ -358,51 +440,50 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>Phone Number (SMS Target) *</label>
-                    <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="e.g. +233244123456" required />
+                    <label>Phone Number *</label>
+                    <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} placeholder="e.g. +233..." required />
                   </div>
                   <div className="form-group">
                     <label>Email Address</label>
-                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. member@email.com" />
+                    <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. name@mail.com" />
                   </div>
                   <div className="form-group">
                     <label>Occupation *</label>
-                    <input type="text" value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="e.g. Farmer, Trader" required />
+                    <input type="text" value={occupation} onChange={(e) => setOccupation(e.target.value)} placeholder="Occupation" required />
                   </div>
                   <div className="form-group">
-                    <label>Congregation / Church *</label>
-                    <input type="text" value={congregation} onChange={(e) => setCongregation(e.target.value)} placeholder="e.g. Assembly of God Sege" required />
+                    <label>Congregation *</label>
+                    <select value={congregation} onChange={(e) => setCongregation(e.target.value)} required>
+                      {congregations.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      {congregations.length === 0 && <option value="">-- No congregations configured --</option>}
+                    </select>
                   </div>
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label>House Number or GPS Address *</label>
-                    <input type="text" value={houseNoGps} onChange={(e) => setHouseNoGps(e.target.value)} placeholder="e.g. SG-102-1244" required />
+                    <label>House No. or GPS Address *</label>
+                    <input type="text" value={houseNoGps} onChange={(e) => setHouseNoGps(e.target.value)} placeholder="e.g. SG-120-1200" required />
                   </div>
                   <div className="form-group">
                     <label>Landmark (GPS backup) *</label>
-                    <input type="text" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="e.g. Near Sege Market" required />
+                    <input type="text" value={landmark} onChange={(e) => setLandmark(e.target.value)} placeholder="e.g. Behind Assembly" required />
                   </div>
                   <div className="form-group">
-                    <label>Group / Fellowship Name</label>
-                    <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. Mustard Seed Welfare Group" />
+                    <label>Fellowship Group Name</label>
+                    <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="e.g. Faith Group" />
                   </div>
                 </div>
 
-                {/* Section 2: Beneficiary Nomination */}
+                {/* Beneficiaries Nominee Forms */}
                 <div className="flex justify-between align-center" style={{ margin: '16px 0 8px 0', borderBottom: '2px solid var(--primary)', paddingBottom: '4px' }}>
-                  <h3 style={{ margin: 0, fontSize: '16px' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', color: 'var(--primary)' }}>
                     Beneficiary Nominations (Minimum 5 required)
                   </h3>
                   <button type="button" className="btn btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={handleAddBeneficiaryField}>
                     + Add Nomination
                   </button>
                 </div>
-                
-                <p className="text-muted" style={{ fontSize: '12px', marginTop: '-8px' }}>
-                  Specify the details of at least 5 individuals. The sum of all shares must equal exactly 100%.
-                </p>
 
                 <div className="beneficiary-list-editor">
                   {beneficiariesForm.map((b, idx) => (
@@ -426,12 +507,9 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                             <option value="Spouse">Spouse</option>
                             <option value="Son">Son</option>
                             <option value="Daughter">Daughter</option>
-                            <option value="Father">Father</option>
-                            <option value="Mother">Mother</option>
                             <option value="Brother">Brother</option>
                             <option value="Sister">Sister</option>
-                            <option value="Nephew">Nephew</option>
-                            <option value="Niece">Niece</option>
+                            <option value="Parent">Parent</option>
                             <option value="Friend">Friend</option>
                           </select>
                         </div>
@@ -440,11 +518,10 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                           <input type="text" value={b.phone_number} onChange={(e) => handleBeneficiaryChange(idx, 'phone_number', e.target.value)} placeholder="Phone" required={idx < 5} />
                         </div>
                       </div>
-                      
                       <div className="form-row" style={{ marginTop: '8px' }}>
                         <div className="form-group">
-                          <label>House / GPS Address *</label>
-                          <input type="text" value={b.house_number} onChange={(e) => handleBeneficiaryChange(idx, 'house_number', e.target.value)} placeholder="GPS Address" required={idx < 5} />
+                          <label>GPS Address *</label>
+                          <input type="text" value={b.house_number} onChange={(e) => handleBeneficiaryChange(idx, 'house_number', e.target.value)} placeholder="GPS Location" required={idx < 5} />
                         </div>
                         <div className="form-group">
                           <label>Marital Status</label>
@@ -452,7 +529,6 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                             <option value="Single">Single</option>
                             <option value="Married">Married</option>
                             <option value="Divorced">Divorced</option>
-                            <option value="Widowed">Widowed</option>
                           </select>
                         </div>
                       </div>
@@ -466,24 +542,23 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
                   ))}
                 </div>
 
-                <div className="flex align-center justify-between" style={{ padding: '8px', background: 'var(--bg-main)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '13px' }}>
-                  <span>Total Beneficiary Percentage:</span>
+                <div className="flex align-center justify-between p-8" style={{ background: 'var(--bg-main)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '13px' }}>
+                  <span>Total Beneficiary Percentage Split:</span>
                   <span className={`bold ${Math.abs(beneficiariesForm.reduce((sum, b) => sum + b.percentage, 0) - 100) < 0.01 ? 'text-success' : 'text-danger'}`}>
                     {beneficiariesForm.reduce((sum, b) => sum + b.percentage, 0)}% (Must equal exactly 100%)
                   </span>
                 </div>
 
               </div>
-              
               <div className="modal-footer">
-                <button type="button" className="btn btn-outline" onClick={() => setShowAddModal(false)}>Cancel</button>
+                <button type="button" className="btn btn-outline" onClick={() => { setShowAddModal(false); setShowEditModal(false); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save Member Profile</button>
               </div>
             </form>
-
           </div>
         </div>
       )}
+
     </div>
   );
 };
