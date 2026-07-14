@@ -3,6 +3,7 @@ import { mockDb } from './db/mockDb';
 import type { Member, Beneficiary, Transaction, Loan, SMSLog, SMSTemplate, AuditLog, AccountCOA, JournalEntry, MobileMoneyTransaction, Congregation, Guarantor, StaffUser } from './db/supabase';
 
 // Components
+import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
 import { CongregationManagement } from './components/CongregationManagement';
 import { MemberManagement } from './components/MemberManagement';
@@ -20,15 +21,15 @@ import { SecurityAudit } from './components/SecurityAudit';
 import { 
   Users, CreditCard, Landmark, TrendingUp, DollarSign, 
   MessageSquare, ShieldCheck, Sun, Moon, Menu, Landmark as BankIcon, 
-  ArrowUpRight, ArrowDownRight, UserCheck, ShieldAlert, Key
+  ArrowUpRight, ArrowDownRight, UserCheck, ShieldAlert, Key, LogOut
 } from 'lucide-react';
 
 function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Active Role and Navigation Tab State
-  const [userRole, setUserRole] = useState<string>('Super Administrator');
+  // Mandatory Authentication Session State
+  const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
   const [selectedTab, setSelectedTab] = useState<string>('dashboard');
 
   // Database States
@@ -47,9 +48,16 @@ function App() {
   const [momoTransactions, setMomoTransactions] = useState<MobileMoneyTransaction[]>([]);
   const [smsWallet, setSmsWallet] = useState<number>(0);
 
-  // Initialize DB and fetch local state
+  // Initialize DB and fetch local session
   useEffect(() => {
     mockDb.initialize();
+    
+    // Recover user session
+    const stored = localStorage.getItem('current_user');
+    if (stored) {
+      setCurrentUser(JSON.parse(stored));
+    }
+    
     refreshLocalState();
   }, []);
 
@@ -71,13 +79,25 @@ function App() {
   };
 
   const getOperatorDetails = () => {
-    const list = mockDb.getStaffUsers();
-    const match = list.find(u => u.role === userRole);
+    if (!currentUser) return { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
     return {
-      name: match ? match.full_name : 'Staff operator',
-      email: match ? match.email : 'operator@mustardseed.org',
-      role: userRole
+      name: currentUser.full_name,
+      email: currentUser.email,
+      role: currentUser.role
     };
+  };
+
+  // Login/Logout hooks
+  const handleLoginSuccess = (profile: StaffUser) => {
+    localStorage.setItem('current_user', JSON.stringify(profile));
+    setCurrentUser(profile);
+    setSelectedTab('dashboard');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('current_user');
+    setCurrentUser(null);
+    setSelectedTab('dashboard');
   };
 
   // Toggle Theme
@@ -116,7 +136,7 @@ function App() {
     refreshLocalState();
   };
 
-  // 3. Transaction mutations (deposit, withdrawal, share_purchase)
+  // 3. Transaction mutations
   const handlePostTransaction = (txData: { member_id: string; type: 'deposit' | 'withdrawal' | 'share_purchase'; amount: number; description: string; reference?: string; notes?: string }) => {
     mockDb.postTransaction(txData, getOperatorDetails());
     refreshLocalState();
@@ -170,9 +190,8 @@ function App() {
     refreshLocalState();
   };
 
-  // 9. SMS gateway mutations
+  // 9. SMS mutations
   const handleUpdateTemplate = (type: string, content: string) => {
-    // kept for SMSNotification back-compatibility trigger
     mockDb.saveSMSTemplate({ name: type + ' Template', event: type, body: content, recipient_type: 'Member' }, undefined, getOperatorDetails());
     refreshLocalState();
   };
@@ -188,8 +207,8 @@ function App() {
   };
 
   // 10. Staff roles assignment
-  const handleAssignRole = (email: string, roleName: string, fullName?: string) => {
-    mockDb.assignUserRole(email, roleName, fullName, getOperatorDetails());
+  const handleAssignRole = (profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_user_id?: string }) => {
+    mockDb.assignUserRole(profile, getOperatorDetails());
     refreshLocalState();
   };
 
@@ -204,29 +223,39 @@ function App() {
     refreshLocalState();
   };
 
-  // Access Control verification
+  // Access Control authorization verification
   const canAccessTab = (tab: string): boolean => {
-    if (userRole === 'Super Administrator' || userRole === 'Administrator') return true;
+    if (!currentUser) return false;
+    
+    // Super Administrator and Administrator have wide access
+    if (currentUser.role === 'Super Administrator' || currentUser.role === 'Super Admin') return true;
+    if (currentUser.role === 'Administrator') {
+      return tab !== 'staff' && tab !== 'audit'; // cannot reset db or manage user roles
+    }
+    if (currentUser.role === 'Auditor') {
+      return tab !== 'staff'; // read-only access to all modules except user management
+    }
 
     switch (tab) {
       case 'dashboard':
+        return true;
       case 'congregations':
       case 'members':
+        return currentUser.role === 'Accountant';
       case 'deposits':
       case 'withdrawals':
+        return currentUser.role === 'Accountant' || currentUser.role === 'Collection Officer' || currentUser.role === 'Collections Officer';
       case 'loans':
       case 'guarantors':
+        return currentUser.role === 'Loan Officer';
       case 'shares':
-        return true;
-      case 'accounting':
-        return userRole === 'Accountant';
+        return currentUser.role === 'Accountant';
       case 'momo':
-        return userRole === 'Accountant' || userRole === 'Collections Officer';
+        return currentUser.role === 'Accountant' || currentUser.role === 'Collection Officer' || currentUser.role === 'Collections Officer';
+      case 'accounting':
+        return currentUser.role === 'Accountant';
       case 'sms':
-        return userRole === 'Accountant' || userRole === 'Administrator' || userRole === 'Super Administrator';
-      case 'staff':
-      case 'audit':
-        return false; // restricted to Admins (already allowed in the top check)
+        return currentUser.role === 'Accountant';
       default:
         return false;
     }
@@ -239,14 +268,10 @@ function App() {
     }
   };
 
-  const roles = [
-    'Super Administrator',
-    'Administrator',
-    'Accountant',
-    'Loan Officer',
-    'Collections Officer',
-    'Member'
-  ];
+  // Root authentication guard
+  if (!currentUser) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <div className="app-container">
@@ -276,54 +301,68 @@ function App() {
             <BankIcon size={18} /> Dashboard
           </div>
 
-          <div 
-            className={`sidebar-item ${selectedTab === 'congregations' ? 'active' : ''}`}
-            onClick={() => handleTabClick('congregations')}
-          >
-            <UserCheck size={18} /> Congregations
-          </div>
+          {canAccessTab('congregations') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'congregations' ? 'active' : ''}`}
+              onClick={() => handleTabClick('congregations')}
+            >
+              <UserCheck size={18} /> Congregations
+            </div>
+          )}
 
-          <div 
-            className={`sidebar-item ${selectedTab === 'members' ? 'active' : ''}`}
-            onClick={() => handleTabClick('members')}
-          >
-            <Users size={18} /> Members
-          </div>
+          {canAccessTab('members') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'members' ? 'active' : ''}`}
+              onClick={() => handleTabClick('members')}
+            >
+              <Users size={18} /> Members
+            </div>
+          )}
 
-          <div 
-            className={`sidebar-item ${selectedTab === 'deposits' ? 'active' : ''}`}
-            onClick={() => handleTabClick('deposits')}
-          >
-            <ArrowUpRight size={18} /> Deposits
-          </div>
+          {canAccessTab('deposits') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'deposits' ? 'active' : ''}`}
+              onClick={() => handleTabClick('deposits')}
+            >
+              <ArrowUpRight size={18} /> Deposits
+            </div>
+          )}
 
-          <div 
-            className={`sidebar-item ${selectedTab === 'withdrawals' ? 'active' : ''}`}
-            onClick={() => handleTabClick('withdrawals')}
-          >
-            <ArrowDownRight size={18} /> Withdrawals
-          </div>
+          {canAccessTab('withdrawals') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'withdrawals' ? 'active' : ''}`}
+              onClick={() => handleTabClick('withdrawals')}
+            >
+              <ArrowDownRight size={18} /> Withdrawals
+            </div>
+          )}
 
-          <div 
-            className={`sidebar-item ${selectedTab === 'loans' ? 'active' : ''}`}
-            onClick={() => handleTabClick('loans')}
-          >
-            <Landmark size={18} /> Loans
-          </div>
+          {canAccessTab('loans') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'loans' ? 'active' : ''}`}
+              onClick={() => handleTabClick('loans')}
+            >
+              <Landmark size={18} /> Loans
+            </div>
+          )}
 
-          <div 
-            className={`sidebar-item ${selectedTab === 'guarantors' ? 'active' : ''}`}
-            onClick={() => handleTabClick('guarantors')}
-          >
-            <ShieldAlert size={18} /> Guarantors
-          </div>
+          {canAccessTab('guarantors') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'guarantors' ? 'active' : ''}`}
+              onClick={() => handleTabClick('guarantors')}
+            >
+              <ShieldAlert size={18} /> Guarantors
+            </div>
+          )}
 
-          <div 
-            className={`sidebar-item ${selectedTab === 'shares' ? 'active' : ''}`}
-            onClick={() => handleTabClick('shares')}
-          >
-            <TrendingUp size={18} /> Shares & Dividends
-          </div>
+          {canAccessTab('shares') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'shares' ? 'active' : ''}`}
+              onClick={() => handleTabClick('shares')}
+            >
+              <TrendingUp size={18} /> Shares & Dividends
+            </div>
+          )}
 
           {canAccessTab('momo') && (
             <div 
@@ -352,32 +391,33 @@ function App() {
             </div>
           )}
 
-          {(userRole === 'Super Administrator' || userRole === 'Administrator') && (
-            <>
-              <div 
-                className={`sidebar-item ${selectedTab === 'staff' ? 'active' : ''}`}
-                onClick={() => handleTabClick('staff')}
-              >
-                <Key size={18} /> Staff User Roles
-              </div>
-              <div 
-                className={`sidebar-item ${selectedTab === 'audit' ? 'active' : ''}`}
-                onClick={() => handleTabClick('audit')}
-              >
-                <ShieldCheck size={18} /> Compliance & Audits
-              </div>
-            </>
+          {canAccessTab('staff') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'staff' ? 'active' : ''}`}
+              onClick={() => handleTabClick('staff')}
+            >
+              <Key size={18} /> Staff User Roles
+            </div>
+          )}
+
+          {canAccessTab('audit') && (
+            <div 
+              className={`sidebar-item ${selectedTab === 'audit' ? 'active' : ''}`}
+              onClick={() => handleTabClick('audit')}
+            >
+              <ShieldCheck size={18} /> Compliance & Audits
+            </div>
           )}
         </div>
 
         <div className="sidebar-footer">
           <div className="user-badge">
             <div className="user-badge-avatar">
-              {userRole[0]}
+              {currentUser.full_name[0]}
             </div>
             <div className="user-badge-info">
-              <span className="user-badge-name">Mustard Seed Staff</span>
-              <span className="user-badge-role" style={{ fontSize: '10px' }}>{userRole}</span>
+              <span className="user-badge-name">{currentUser.full_name}</span>
+              <span className="user-badge-role" style={{ fontSize: '9px' }}>{currentUser.role}</span>
             </div>
           </div>
         </div>
@@ -395,18 +435,15 @@ function App() {
 
           <div className="header-controls">
             <div className="flex align-center gap-8" style={{ borderRight: '1px solid var(--border)', paddingRight: '16px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>DEMO ROLE:</span>
-              <select 
-                value={userRole} 
-                onChange={(e) => {
-                  setUserRole(e.target.value);
-                  setSelectedTab('dashboard');
-                }}
-                style={{ padding: '4px 8px', fontSize: '12px', border: '1px solid var(--border)', borderRadius: '6px' }}
-              >
-                {roles.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+              <div style={{ textAlign: 'right' }}>
+                <div className="bold" style={{ fontSize: '13px', color: 'var(--text-main)' }}>{currentUser.full_name}</div>
+                <div className="text-muted" style={{ fontSize: '10px' }}>{currentUser.role} • {currentUser.email}</div>
+              </div>
             </div>
+
+            <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }} onClick={handleLogout}>
+              <LogOut size={14} /> Sign Out
+            </button>
 
             <button className="btn btn-outline btn-icon-only" onClick={toggleTheme}>
               {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
@@ -435,7 +472,7 @@ function App() {
               congregations={congregations}
               onSaveCongregation={handleSaveCongregation}
               onDeleteCongregation={handleDeleteCongregation}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -446,7 +483,7 @@ function App() {
               congregations={congregations}
               onAddMember={handleAddMember}
               onEditMember={handleEditMember}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -454,7 +491,7 @@ function App() {
             <SavingsManagement
               members={members}
               onPostTransaction={handlePostTransaction}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -462,7 +499,7 @@ function App() {
             <WithdrawalManagement
               members={members}
               onPostTransaction={handlePostTransaction}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -473,7 +510,7 @@ function App() {
               onApplyLoan={handleApplyLoan}
               onUpdateStatus={handleUpdateLoanStatus}
               onRepayLoan={handleRepayLoan}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -483,7 +520,7 @@ function App() {
               loans={loans}
               guarantors={guarantors}
               onAddGuarantor={handleAddGuarantor}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -493,7 +530,7 @@ function App() {
               transactions={transactions}
               onPostTransaction={handlePostTransaction}
               onDistributeDividends={handleDistributeDividends}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -502,7 +539,7 @@ function App() {
               members={members}
               momoTransactions={momoTransactions}
               onCreateTransaction={handleCreateMoMo}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -512,7 +549,7 @@ function App() {
               coa={coa}
               journalEntries={journalEntries}
               onPostJournalEntry={handlePostJournalEntry}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
@@ -524,25 +561,25 @@ function App() {
               onUpdateTemplate={handleUpdateTemplate}
               onUpdateSettings={handleUpdateSettings}
               onTopUpWallet={handleTopUpSMSWallet}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
-          {selectedTab === 'staff' && (userRole === 'Super Administrator' || userRole === 'Administrator') && (
+          {selectedTab === 'staff' && (currentUser.role === 'Super Administrator' || currentUser.role === 'Administrator') && (
             <UserRolesManagement
               staffUsers={staffUsers}
               members={members}
               onAssignRole={handleAssignRole}
               onRevokeRole={handleRevokeRole}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
 
-          {selectedTab === 'audit' && (userRole === 'Super Administrator' || userRole === 'Administrator') && (
+          {selectedTab === 'audit' && (currentUser.role === 'Super Administrator' || currentUser.role === 'Administrator') && (
             <SecurityAudit
               auditLogs={auditLogs}
               onResetDb={handleResetDb}
-              userRole={userRole}
+              userRole={currentUser.role}
             />
           )}
         </div>

@@ -158,8 +158,8 @@ export const LoanManagement: React.FC<LoanManagementProps> = ({
     return schedule;
   };
 
-  const canApprove = userRole === 'Super Admin' || userRole === 'Administrator' || userRole === 'Loan Officer';
-  const isMemberRole = userRole === 'Member';
+  const canApprove = userRole === 'Super Administrator' || userRole === 'Super Admin' || userRole === 'Administrator';
+  const isMemberRole = userRole === 'Member' || userRole === 'Auditor';
 
   // Filter members list based on memberSearchTerm in selection box
   const searchableMembers = members.filter(m =>

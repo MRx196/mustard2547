@@ -133,10 +133,11 @@ const INITIAL_SMS_TEMPLATES: SMSTemplate[] = [
 
 // Seed Staff Users
 const INITIAL_STAFF: StaffUser[] = [
-  { email: 'admin@mustardseed.org', full_name: 'Eric Kwetey (Admin)', role: 'Super Administrator', status: 'Active', last_signin: '2026-07-14T07:00:00Z', created_at: '2026-01-01T00:00:00Z' },
-  { email: 'accountant@mustardseed.org', full_name: 'Jane Mensah', role: 'Accountant', status: 'Active', last_signin: '2026-07-14T07:15:00Z', created_at: '2026-01-05T00:00:00Z' },
-  { email: 'loans@mustardseed.org', full_name: 'Thomas Addo', role: 'Loan Officer', status: 'Active', last_signin: '2026-07-14T06:50:00Z', created_at: '2026-01-10T00:00:00Z' },
-  { email: 'momo@mustardseed.org', full_name: 'Mercy Osei', role: 'Collections Officer', status: 'Active', last_signin: '2026-07-14T07:22:00Z', created_at: '2026-01-12T00:00:00Z' }
+  { email: 'admin@mustardseed.org', full_name: 'Eric Kwetey (Admin)', role: 'Super Administrator', status: 'Active', last_signin: '2026-07-14T07:00:00Z', created_at: '2026-01-01T00:00:00Z', username: 'admin', phone_number: '+233240001100' },
+  { email: 'accountant@mustardseed.org', full_name: 'Jane Mensah', role: 'Accountant', status: 'Active', last_signin: '2026-07-14T07:15:00Z', created_at: '2026-01-05T00:00:00Z', username: 'accountant', phone_number: '+233240001101' },
+  { email: 'loans@mustardseed.org', full_name: 'Thomas Addo', role: 'Loan Officer', status: 'Active', last_signin: '2026-07-14T06:50:00Z', created_at: '2026-01-10T00:00:00Z', username: 'loans', phone_number: '+233240001102' },
+  { email: 'momo@mustardseed.org', full_name: 'Mercy Osei', role: 'Collection Officer', status: 'Active', last_signin: '2026-07-14T07:22:00Z', created_at: '2026-01-12T00:00:00Z', username: 'momo', phone_number: '+233240001103' },
+  { email: 'auditor@mustardseed.org', full_name: 'Audit Inspector', role: 'Auditor', status: 'Active', last_signin: 'N/A', created_at: '2026-07-14T08:00:00Z', username: 'auditor', phone_number: '+233240001104' }
 ];
 
 // Seed Audit Logs
@@ -877,28 +878,42 @@ export const mockDb = {
   },
 
   // Staff Roles mutations
-  assignUserRole: (email: string, roleName: string, fullName?: string, operator?: { name: string; email: string; role: string }) => {
+  assignUserRole: (
+    profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_user_id?: string },
+    operator?: { name: string; email: string; role: string }
+  ) => {
     const list = mockDb.getStaffUsers();
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
 
-    const idx = list.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+    const idx = list.findIndex(u => u.email.toLowerCase() === profile.email.toLowerCase());
     if (idx !== -1) {
-      const prev = list[idx].role;
-      list[idx].role = roleName;
+      const prev = JSON.stringify(list[idx]);
+      list[idx] = {
+        ...list[idx],
+        role: profile.role,
+        full_name: profile.full_name || list[idx].full_name,
+        username: profile.username || list[idx].username,
+        phone_number: profile.phone_number || list[idx].phone_number,
+        status: profile.status || list[idx].status,
+        auth_user_id: profile.auth_user_id || list[idx].auth_user_id
+      };
       localStorage.setItem('staff_users', JSON.stringify(list));
-      mockDb.logAudit(activeOperator, 'Change Staff User Role', 'UserRoles', email, prev, roleName);
+      mockDb.logAudit(activeOperator, 'Change Staff User Details', 'UserRoles', profile.email, prev, JSON.stringify(list[idx]));
     } else {
       const newU: StaffUser = {
-        email,
-        full_name: fullName || 'New Staff User',
-        role: roleName,
-        status: 'Active',
+        email: profile.email,
+        full_name: profile.full_name || 'New Staff User',
+        role: profile.role,
+        status: profile.status || 'Active',
         last_signin: 'N/A',
-        created_at: getNowString()
+        created_at: getNowString(),
+        username: profile.username || profile.email.split('@')[0],
+        phone_number: profile.phone_number || '',
+        auth_user_id: profile.auth_user_id || ''
       };
       list.push(newU);
       localStorage.setItem('staff_users', JSON.stringify(list));
-      mockDb.logAudit(activeOperator, 'Assign Staff User Role', 'UserRoles', email, 'N/A', roleName);
+      mockDb.logAudit(activeOperator, 'Assign Staff User Role', 'UserRoles', profile.email, 'N/A', JSON.stringify(newU));
     }
   },
 

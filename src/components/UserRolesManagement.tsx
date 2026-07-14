@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import type { Member, StaffUser } from '../db/supabase';
-import { Plus, Search, Edit2, CheckCircle, AlertCircle, Trash2, Key } from 'lucide-react';
+import { signUpStaffUser } from '../db/supabase';
+import { Plus, Search, Edit2, CheckCircle, AlertCircle, Trash2, Key, Eye, EyeOff } from 'lucide-react';
 
 interface UserRolesManagementProps {
   staffUsers: StaffUser[];
   members: Member[];
-  onAssignRole: (email: string, roleName: string, fullName?: string) => void;
+  onAssignRole: (profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_user_id?: string }) => void;
   onRevokeRole: (email: string) => void;
   userRole: string;
 }
@@ -19,11 +20,19 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   // Form State
   const [emailInput, setEmailInput] = useState('');
   const [roleSelect, setRoleSelect] = useState('Administrator');
   const [fullNameInput, setFullNameInput] = useState('');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [statusSelect, setStatusSelect] = useState<'Active' | 'Inactive'>('Active');
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -34,38 +43,108 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
     const match = members.find(m => m.email.toLowerCase() === val.trim().toLowerCase());
     if (match) {
       setFullNameInput(match.full_name);
+      setPhoneInput(match.phone_number);
     }
   };
 
-  const handleAssignSubmit = (e: React.FormEvent) => {
+  const handleOpenAdd = () => {
+    setIsEditing(false);
+    setEmailInput('');
+    setFullNameInput('');
+    setUsernameInput('');
+    setPasswordInput('');
+    setPhoneInput('');
+    setRoleSelect('Administrator');
+    setStatusSelect('Active');
+    setErrorMsg('');
+    setSuccessMsg('');
+    setShowAssignModal(true);
+  };
+
+  const handleOpenEdit = (u: StaffUser) => {
+    setIsEditing(true);
+    setEmailInput(u.email);
+    setFullNameInput(u.full_name);
+    setUsernameInput(u.username || '');
+    setPasswordInput(''); // Leave blank unless resetting
+    setPhoneInput(u.phone_number || '');
+    setRoleSelect(u.role);
+    setStatusSelect(u.status || 'Active');
+    setErrorMsg('');
+    setSuccessMsg('');
+    setShowAssignModal(true);
+  };
+
+  const handleAssignSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+    setLoading(true);
 
-    if (!emailInput.trim()) {
-      setErrorMsg('Please enter an email address.');
+    const email = emailInput.trim();
+    const role = roleSelect;
+    const fullName = fullNameInput.trim();
+    const username = usernameInput.trim();
+    const phone = phoneInput.trim();
+    const status = statusSelect;
+
+    if (!email || !fullName || !role) {
+      setErrorMsg('Please fill in all required fields.');
+      setLoading(false);
       return;
     }
 
     try {
-      onAssignRole(emailInput.trim(), roleSelect, fullNameInput.trim() || undefined);
-      setSuccessMsg('Role assigned successfully and access levels mapped!');
-      
-      setEmailInput('');
-      setFullNameInput('');
-      setRoleSelect('Administrator');
+      let authUserId = undefined;
 
+      // 1. If registering a new user, create account in Supabase Auth
+      if (!isEditing) {
+        if (!passwordInput || passwordInput.length < 6) {
+          setErrorMsg('Password is required and must be at least 6 characters.');
+          setLoading(false);
+          return;
+        }
+
+        const { data, error } = await signUpStaffUser(email, passwordInput);
+        if (error) {
+          // If signup fails, throw error unless it's a seed duplicate warning
+          if (!error.message.includes('already registered')) {
+            setErrorMsg(error.message || 'Supabase Auth registration failed.');
+            setLoading(false);
+            return;
+          }
+        } else if (data && data.user) {
+          authUserId = data.user.id;
+        }
+      }
+
+      // 2. Save/Update Profile in Users DB table
+      onAssignRole({
+        email,
+        role,
+        full_name: fullName,
+        username: username || email.split('@')[0],
+        phone_number: phone,
+        status,
+        auth_user_id: authUserId
+      });
+
+      setSuccessMsg(isEditing ? 'Access role profile modified!' : 'Supabase Auth account created & profile initialized!');
+      
       setTimeout(() => {
         setShowAssignModal(false);
         setSuccessMsg('');
       }, 1200);
     } catch (err: any) {
-      setErrorMsg(err.message || 'Failed to assign role.');
+      setErrorMsg(err.message || 'Role mapping failed.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleRevoke = (email: string) => {
-    if (userRole !== 'Super Administrator' && userRole !== 'Super Admin') {
+    const isSuperAdmin = userRole === 'Super Administrator' || userRole === 'Super Admin';
+    if (!isSuperAdmin) {
       alert('Action Unauthorized: Only Super Administrators can revoke roles.');
       return;
     }
@@ -75,8 +154,7 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
     }
   };
 
-  const isSuperAdmin = userRole === 'Super Administrator' || userRole === 'Super Admin';
-  const isReadOnly = userRole === 'Member' || userRole === 'Collection Officer' || userRole === 'Collections Officer';
+  const isReadOnly = userRole === 'Auditor';
 
   const filteredStaff = staffUsers.filter(u =>
     u.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -89,20 +167,21 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
     'Administrator',
     'Accountant',
     'Loan Officer',
-    'Collections Officer',
-    'Member'
+    'Collection Officer',
+    'Auditor'
   ];
 
   return (
     <div className="flex flex-col gap-16 w-full">
-      {/* Header section */}
+      
+      {/* Header bar */}
       <div className="flex justify-between align-center">
         <div>
           <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--primary)' }}>Staff & User Roles</h2>
           <span className="text-muted" style={{ fontSize: '13px' }}>Assign role-based access permissions and manage system administrators.</span>
         </div>
         {!isReadOnly && (
-          <button className="btn btn-primary" onClick={() => { setEmailInput(''); setFullNameInput(''); setShowAssignModal(true); }}>
+          <button className="btn btn-primary" onClick={handleOpenAdd}>
             <Plus size={18} /> Assign User Role
           </button>
         )}
@@ -126,7 +205,9 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
           <thead>
             <tr>
               <th>Email Address</th>
+              <th>Username</th>
               <th>Full Name</th>
+              <th>Phone Number</th>
               <th>Assigned Access Role</th>
               <th>Status</th>
               <th>Last Sign-In</th>
@@ -138,7 +219,9 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
             {filteredStaff.map(u => (
               <tr key={u.email}>
                 <td className="bold" style={{ color: 'var(--primary-light)', fontFamily: 'monospace' }}>{u.email}</td>
+                <td style={{ fontFamily: 'monospace' }}>{u.username || '-'}</td>
                 <td className="bold">{u.full_name}</td>
+                <td>{u.phone_number || '-'}</td>
                 <td>
                   <span className={`badge ${
                     u.role.includes('Super') ? 'badge-danger' :
@@ -149,24 +232,23 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
                   </span>
                 </td>
                 <td>
-                  <span className="badge badge-success">{u.status}</span>
+                  <span className={`badge ${u.status === 'Active' ? 'badge-success' : 'badge-danger'}`}>
+                    {u.status || 'Active'}
+                  </span>
                 </td>
-                <td style={{ fontSize: '12px' }}>{u.last_signin}</td>
+                <td style={{ fontSize: '12px' }}>
+                  {u.last_signin && u.last_signin !== 'N/A' ? new Date(u.last_signin).toLocaleString() : 'N/A'}
+                </td>
                 <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                   {new Date(u.created_at).toLocaleDateString()}
                 </td>
                 {!isReadOnly && (
                   <td className="text-center">
                     <div className="flex gap-8 justify-center">
-                      <button className="btn btn-outline" style={{ padding: '6px' }} onClick={() => {
-                        setEmailInput(u.email);
-                        setFullNameInput(u.full_name);
-                        setRoleSelect(u.role);
-                        setShowAssignModal(true);
-                      }}>
+                      <button className="btn btn-outline" style={{ padding: '6px' }} onClick={() => handleOpenEdit(u)}>
                         <Edit2 size={12} />
                       </button>
-                      <button className="btn btn-danger" style={{ padding: '6px' }} onClick={() => handleRevoke(u.email)} disabled={!isSuperAdmin}>
+                      <button className="btn btn-danger" style={{ padding: '6px' }} onClick={() => handleRevoke(u.email)}>
                         <Trash2 size={12} />
                       </button>
                     </div>
@@ -181,9 +263,9 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
       {/* Assign User Role Modal */}
       {showAssignModal && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: '450px' }}>
+          <div className="modal-content" style={{ maxWidth: '500px' }}>
             <div className="modal-header">
-              <h2 className="modal-title">Assign/Modify Access Role</h2>
+              <h2 className="modal-title">{isEditing ? 'Modify Access Role Details' : 'Assign New Staff Access'}</h2>
               <button className="modal-close" onClick={() => setShowAssignModal(false)}>&times;</button>
             </div>
 
@@ -193,46 +275,99 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
                 {errorMsg && <div className="alert alert-danger"><AlertCircle size={16} /> <span>{errorMsg}</span></div>}
                 {successMsg && <div className="alert alert-success"><CheckCircle size={16} /> <span>{successMsg}</span></div>}
 
-                <div className="form-group">
-                  <label>Staff Email Address *</label>
-                  <input
-                    type="email"
-                    value={emailInput}
-                    onChange={(e) => handleEmailChange(e.target.value)}
-                    placeholder="e.g. staff@mustardseed.org"
-                    required
-                    autoFocus
-                  />
-                  <span className="text-muted" style={{ fontSize: '10px', marginTop: '2px', display: 'block' }}>
-                    Type email address. If it matches a registered member email, their name is auto-completed.
-                  </span>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Staff Email Address *</label>
+                    <input
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => handleEmailChange(e.target.value)}
+                      placeholder="e.g. staff@mustardseed.org"
+                      required
+                      disabled={isEditing}
+                      autoFocus={!isEditing}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Username *</label>
+                    <input
+                      type="text"
+                      value={usernameInput}
+                      onChange={(e) => setUsernameInput(e.target.value)}
+                      placeholder="e.g. jdoe"
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label>Full Name *</label>
-                  <input
-                    type="text"
-                    value={fullNameInput}
-                    onChange={(e) => setFullNameInput(e.target.value)}
-                    placeholder="Staff Full Name"
-                    required
-                  />
+                {!isEditing && (
+                  <div className="form-group">
+                    <label>Password (For Supabase Auth Creation) *</label>
+                    <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border)', borderRadius: '8px', padding: '0 12px', background: 'var(--bg-input)' }}>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        placeholder="Min 6 characters"
+                        style={{ border: 'none', padding: '10px 0', width: '100%', outline: 'none', background: 'transparent', color: 'var(--text-main)' }}
+                        required={!isEditing}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', padding: 0 }}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Full Name *</label>
+                    <input
+                      type="text"
+                      value={fullNameInput}
+                      onChange={(e) => setFullNameInput(e.target.value)}
+                      placeholder="Staff Full Name"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Phone Number</label>
+                    <input
+                      type="text"
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      placeholder="e.g. +233..."
+                    />
+                  </div>
                 </div>
 
-                <div className="form-group">
-                  <label>Select Access Permission Role *</label>
-                  <select value={roleSelect} onChange={(e) => setRoleSelect(e.target.value)}>
-                    {availableRoles.map(r => (
-                      <option key={r} value={r}>{r}</option>
-                    ))}
-                  </select>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Access Role *</label>
+                    <select value={roleSelect} onChange={(e) => setRoleSelect(e.target.value)}>
+                      {availableRoles.map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>Status *</label>
+                    <select value={statusSelect} onChange={(e: any) => setStatusSelect(e.target.value)}>
+                      <option value="Active">Active</option>
+                      <option value="Inactive">Inactive</option>
+                    </select>
+                  </div>
                 </div>
 
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-outline" onClick={() => setShowAssignModal(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">
-                  <Key size={16} /> Save Authorization
+                <button type="button" className="btn btn-outline" onClick={() => setShowAssignModal(false)} disabled={loading}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  <Key size={16} /> {loading ? 'Saving...' : 'Save Authorization'}
                 </button>
               </div>
             </form>

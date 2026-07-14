@@ -18,6 +18,21 @@ const config = getSupabaseConfig();
 
 export const supabase = createClient(config.url, config.anonKey);
 
+// Sign Up isolated staff account (prevents logging out the active admin session)
+export const signUpStaffUser = async (email: string, password: string) => {
+  const cfg = getSupabaseConfig();
+  const tempClient = createClient(cfg.url, cfg.anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
+    }
+  });
+  
+  const { data, error } = await tempClient.auth.signUp({ email, password });
+  return { data, error };
+};
+
 export interface Congregation {
   id: string;
   name: string;
@@ -118,6 +133,9 @@ export interface StaffUser {
   status: 'Active' | 'Inactive';
   last_signin: string;
   created_at: string;
+  username?: string;
+  phone_number?: string;
+  auth_user_id?: string;
 }
 
 export interface AuditLog {
