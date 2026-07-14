@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import type { AuditLog } from '../db/supabase';
-import { mockDb } from '../db/mockDb';
-import { ShieldCheck, Search, Database, Download, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Search, Database, AlertCircle, FileSpreadsheet, Printer } from 'lucide-react';
 
 interface SecurityAuditProps {
   auditLogs: AuditLog[];
@@ -15,201 +14,195 @@ export const SecurityAudit: React.FC<SecurityAuditProps> = ({
   userRole
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
-  
-  // Filter audit logs
-  const filteredLogs = auditLogs.filter(l =>
-    l.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    l.user_role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    l.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    l.details.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const [moduleFilter, setModuleFilter] = useState('');
+  const [showConfirmReset, setShowConfirmReset] = useState(false);
 
-  const handleBackup = () => {
-    // Generate JSON backup from all local keys
-    const backupData: Record<string, any> = {};
-    const keys = ['members', 'beneficiaries', 'transactions', 'loans', 'sms_templates', 'sms_logs', 'audit_logs', 'chart_of_accounts', 'journal_entries', 'sms_wallet', 'sms_settings', 'momo_transactions'];
-    
-    keys.forEach(k => {
-      backupData[k] = localStorage.getItem(k);
-    });
-
-    const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(
-      JSON.stringify(backupData, null, 2)
-    )}`;
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', jsonString);
-    downloadAnchor.setAttribute('download', `MUSTARD_SEED_BACKUP_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
-
-    mockDb.logAudit(userRole, 'System Audit Control', 'Backup Database', 'Database backup download triggered successfully.');
-    setSuccessMsg('System backup completed and download triggered!');
-    setTimeout(() => setSuccessMsg(''), 2000);
-  };
-
-  const handleRestore = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileReader = new FileReader();
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    fileReader.onload = (event) => {
-      if (!event.target || !event.target.result) return;
-      try {
-        const parsed = JSON.parse(event.target.result as string);
-        Object.keys(parsed).forEach(k => {
-          if (parsed[k] !== null) {
-            localStorage.setItem(k, parsed[k]);
-          }
-        });
-        
-        mockDb.logAudit(userRole, 'System Audit Control', 'Restore Database', 'Database state restored from external backup file.');
-        setSuccessMsg('Database restored successfully! Reloading...');
-        
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-      } catch (err) {
-        alert('Invalid backup file structure.');
-      }
-    };
-    fileReader.readAsText(files[0]);
-  };
+  // Search & Filter Logs
+  const filteredLogs = auditLogs.filter(l => {
+    const matchSearch = (l.user_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (l.user_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (l.action || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        (l.record_affected || '').toLowerCase().includes(searchTerm.toLowerCase());
+    const matchModule = moduleFilter ? l.module === moduleFilter : true;
+    return matchSearch && matchModule;
+  });
 
   const handleReset = () => {
-    if (window.confirm('WARNING: Are you sure you want to purge the database back to initial seed data? All custom entries will be lost.')) {
-      onResetDb();
-      setSuccessMsg('Database has been reset to factory seed values!');
-      setTimeout(() => setSuccessMsg(''), 1500);
+    if (userRole !== 'Super Administrator' && userRole !== 'Super Admin') {
+      alert('Action Unauthorized: Only Super Administrators can clear the database.');
+      return;
     }
+    onResetDb();
+    setShowConfirmReset(false);
+    alert('Mock local database successfully reset to clean seed settings!');
   };
 
-  const isAdmin = userRole === 'Super Admin' || userRole === 'Administrator';
+  const isSuperAdmin = userRole === 'Super Administrator' || userRole === 'Super Admin';
+
+  // CSV Exporter
+  const exportAuditCSV = () => {
+    const headers = ['Date & Time', 'User Name', 'Email', 'Role', 'Action', 'Module', 'Affected ID', 'Previous Value', 'New Value'];
+    const rows = filteredLogs.map(l => [
+      new Date(l.timestamp).toLocaleString(),
+      l.user_name || '',
+      l.user_email || '',
+      l.user_role || '',
+      l.action || '',
+      l.module || '',
+      l.record_affected || '',
+      l.previous_value || '',
+      l.new_value || ''
+    ]);
+
+    const csvContent = [
+      'Compliance Security Audit Logs',
+      headers.join(','),
+      ...rows.map(r => r.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `audit_logs_report.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const modules = Array.from(new Set(auditLogs.map(l => l.module).filter(Boolean)));
 
   return (
-    <div className="flex flex-col gap-16 w-full">
+    <div className="flex flex-col gap-16 w-full print-only-section">
       
-      {successMsg && (
-        <div className="alert alert-success">
-          <ShieldCheck size={18} />
-          <span>{successMsg}</span>
+      {/* Header section */}
+      <div className="flex justify-between align-center">
+        <div>
+          <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--primary)' }}>Compliance Audit Logs</h2>
+          <span className="text-muted" style={{ fontSize: '13px' }}>Monitor security event records, staff modifications, and system transactions.</span>
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-outline" style={{ padding: '8px 12px', fontSize: '12px' }} onClick={() => window.print()}>
+            <Printer size={14} /> Print logs
+          </button>
+          <button className="btn btn-outline" style={{ padding: '8px 12px', fontSize: '12px' }} onClick={exportAuditCSV}>
+            <FileSpreadsheet size={14} /> Export CSV
+          </button>
+          {isSuperAdmin && (
+            <button className="btn btn-danger" onClick={() => setShowConfirmReset(true)} style={{ padding: '8px 12px', fontSize: '12px' }}>
+              <Database size={14} /> Reset Database
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Filter panel */}
+      <div className="flex align-center gap-16" style={{ background: 'var(--bg-card)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)', flexWrap: 'wrap' }}>
+        <div className="flex align-center gap-8" style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '6px 12px', background: 'var(--bg-main)' }}>
+          <Search size={16} className="text-muted" />
+          <input
+            type="text"
+            placeholder="Search email, action..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ border: 'none', background: 'transparent', outline: 'none' }}
+          />
+        </div>
+
+        <div className="form-group" style={{ margin: 0, flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
+          <label style={{ whiteSpace: 'nowrap' }}>Filter Module:</label>
+          <select value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)} style={{ padding: '6px' }}>
+            <option value="">All Modules</option>
+            {modules.map(mod => <option key={mod} value={mod}>{mod}</option>)}
+          </select>
+        </div>
+
+        {(searchTerm || moduleFilter) && (
+          <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => { setSearchTerm(''); setModuleFilter(''); }}>
+            Clear Filters
+          </button>
+        )}
+      </div>
+
+      {/* Audit Log Table */}
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Date & Time</th>
+              <th>Staff User Profile</th>
+              <th>Action Details</th>
+              <th>Module</th>
+              <th>Record ID</th>
+              <th>Previous Value</th>
+              <th>New Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredLogs.map(l => (
+              <tr key={l.id}>
+                <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  {new Date(l.timestamp).toLocaleString()}
+                </td>
+                <td>
+                  <div className="bold">{l.user_name}</div>
+                  <span className="text-muted" style={{ fontSize: '10px', fontFamily: 'monospace' }}>
+                    {l.user_email} • {l.user_role}
+                  </span>
+                </td>
+                <td className="bold" style={{ fontSize: '13px' }}>{l.action}</td>
+                <td>
+                  <span className="badge badge-info" style={{ fontSize: '10px' }}>{l.module}</span>
+                </td>
+                <td style={{ fontFamily: 'monospace', fontSize: '10px' }}>{l.record_affected}</td>
+                <td style={{ maxWidth: '180px', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.previous_value}>
+                  {l.previous_value}
+                </td>
+                <td style={{ maxWidth: '180px', fontSize: '11px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.new_value}>
+                  {l.new_value}
+                </td>
+              </tr>
+            ))}
+            {filteredLogs.length === 0 && (
+              <tr>
+                <td colSpan={7} className="text-center p-16 text-muted">No security logs match filters.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Reset confirmation modal */}
+      {showConfirmReset && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title text-danger">Reset System Database?</h2>
+              <button className="modal-close" onClick={() => setShowConfirmReset(false)}>&times;</button>
+            </div>
+
+            <div className="flex flex-col gap-16" style={{ fontSize: '14px' }}>
+              <div className="alert alert-danger" style={{ margin: 0 }}>
+                <AlertCircle size={24} style={{ flexShrink: 0 }} />
+                <div>
+                  <span className="bold">CRITICAL WARNING!</span>
+                  <p style={{ fontSize: '11px', marginTop: '4px' }}>
+                    This action will wipe all local storage records (Members, Savings, Loans, Journal entries, SMS logs) and restore seed configurations.
+                  </p>
+                </div>
+              </div>
+              <p>Are you sure you want to proceed? This cannot be undone.</p>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setShowConfirmReset(false)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleReset}>Clear Database</button>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Grid: 2col for Database Administration vs Audit Logs */}
-      <div className="grid-2col" style={{ gridTemplateColumns: isAdmin ? '2fr 1fr' : '1fr' }}>
-        
-        {/* Left Side: Audit Trail Table */}
-        <div className="card">
-          <div className="card-title">
-            <span>System Activity Audit Trail</span>
-            <ShieldCheck size={18} className="card-title-icon" />
-          </div>
-
-          <div className="flex align-center gap-8 mb-16" style={{ background: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border)', width: '320px' }}>
-            <Search size={18} className="text-muted" />
-            <input
-              type="text"
-              placeholder="Search audit trail..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ border: 'none', padding: 0, outline: 'none', width: '100%', background: 'transparent' }}
-            />
-          </div>
-
-          <div className="table-container" style={{ maxHeight: '500px' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Operator (Role)</th>
-                  <th>Action</th>
-                  <th>Details Summary</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLogs.map(l => (
-                  <tr key={l.id}>
-                    <td style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      {new Date(l.timestamp).toLocaleString()}
-                    </td>
-                    <td>
-                      <div className="bold">{l.user_name}</div>
-                      <span className="badge badge-info" style={{ fontSize: '9px' }}>{l.user_role}</span>
-                    </td>
-                    <td className="bold" style={{ color: 'var(--primary-dark)' }}>{l.action}</td>
-                    <td style={{ fontSize: '12px', whiteSpace: 'normal', wordBreak: 'break-word' }}>{l.details}</td>
-                  </tr>
-                ))}
-                {filteredLogs.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="text-center p-16 text-muted">No activity records match query parameters.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Right Side: Admin Operations (Visible to admins only) */}
-        {isAdmin && (
-          <div className="flex flex-col gap-16">
-            
-            {/* Database backups */}
-            <div className="card">
-              <div className="card-title">
-                <span>Backup & Restore</span>
-                <Database size={18} className="card-title-icon" />
-              </div>
-              
-              <div className="flex flex-col gap-16">
-                <p className="text-muted" style={{ fontSize: '13px', margin: 0 }}>
-                  Export all client details, ledger tables, savings histories, and logs into a portable JSON backup.
-                </p>
-
-                <button className="btn btn-outline w-full flex justify-between align-center" onClick={handleBackup}>
-                  <span>Download System JSON</span>
-                  <Download size={16} />
-                </button>
-
-                <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '16px' }}>
-                  <label className="bold text-muted" style={{ fontSize: '12px', display: 'block', marginBottom: '8px' }}>
-                    RESTORE SYSTEM FROM FILE
-                  </label>
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={handleRestore}
-                    style={{ fontSize: '12px', width: '100%' }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* System purge */}
-            <div className="card" style={{ borderColor: 'rgba(217, 56, 56, 0.3)' }}>
-              <div className="card-title text-danger">
-                <span>Danger Zone</span>
-                <AlertTriangle size={18} />
-              </div>
-              
-              <div className="flex flex-col gap-16">
-                <p className="text-muted" style={{ fontSize: '13px', margin: 0 }}>
-                  Purge all custom ledger items, templates, and logs, returning the system back to clean demo seed state.
-                </p>
-
-                <button className="btn btn-danger w-full flex justify-between align-center" onClick={handleReset}>
-                  <span>Purge & Reset System</span>
-                  <RefreshCw size={16} />
-                </button>
-              </div>
-            </div>
-
-          </div>
-        )}
-
-      </div>
     </div>
   );
 };

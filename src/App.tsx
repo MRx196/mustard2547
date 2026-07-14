@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { mockDb } from './db/mockDb';
-import type { Member, Beneficiary, Transaction, Loan, SMSLog, SMSTemplate, AuditLog, AccountCOA, JournalEntry, MobileMoneyTransaction, Congregation, Guarantor } from './db/supabase';
+import type { Member, Beneficiary, Transaction, Loan, SMSLog, SMSTemplate, AuditLog, AccountCOA, JournalEntry, MobileMoneyTransaction, Congregation, Guarantor, StaffUser } from './db/supabase';
 
 // Components
 import { Dashboard } from './components/Dashboard';
@@ -14,21 +14,21 @@ import { SharesManagement } from './components/SharesManagement';
 import { AccountingFinance } from './components/AccountingFinance';
 import { MoMoIntegration } from './components/MoMoIntegration';
 import { SMSNotification } from './components/SMSNotification';
+import { UserRolesManagement } from './components/UserRolesManagement';
 import { SecurityAudit } from './components/SecurityAudit';
 
 import { 
   Users, CreditCard, Landmark, TrendingUp, DollarSign, 
   MessageSquare, ShieldCheck, Sun, Moon, Menu, Landmark as BankIcon, 
-  ArrowUpRight, ArrowDownRight, UserCheck, ShieldAlert
+  ArrowUpRight, ArrowDownRight, UserCheck, ShieldAlert, Key
 } from 'lucide-react';
 
 function App() {
-  // Theme & Layout State
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Active Role and Navigation Tab State
-  const [userRole, setUserRole] = useState<string>('Super Admin');
+  const [userRole, setUserRole] = useState<string>('Super Administrator');
   const [selectedTab, setSelectedTab] = useState<string>('dashboard');
 
   // Database States
@@ -40,6 +40,7 @@ function App() {
   const [guarantors, setGuarantors] = useState<Guarantor[]>([]);
   const [templates, setTemplates] = useState<SMSTemplate[]>([]);
   const [smsLogs, setSmsLogs] = useState<SMSLog[]>([]);
+  const [staffUsers, setStaffUsers] = useState<StaffUser[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [coa, setCOA] = useState<AccountCOA[]>([]);
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
@@ -61,11 +62,22 @@ function App() {
     setGuarantors(mockDb.getGuarantors());
     setTemplates(mockDb.getSMSTemplates());
     setSmsLogs(mockDb.getSMSLogs());
+    setStaffUsers(mockDb.getStaffUsers());
     setAuditLogs(mockDb.getAuditLogs());
     setCOA(mockDb.getCOA());
     setJournalEntries(mockDb.getJournalEntries());
     setMomoTransactions(mockDb.getMoMoTransactions());
     setSmsWallet(mockDb.getSMSWallet());
+  };
+
+  const getOperatorDetails = () => {
+    const list = mockDb.getStaffUsers();
+    const match = list.find(u => u.role === userRole);
+    return {
+      name: match ? match.full_name : 'Staff operator',
+      email: match ? match.email : 'operator@mustardseed.org',
+      role: userRole
+    };
   };
 
   // Toggle Theme
@@ -77,12 +89,12 @@ function App() {
 
   // 1. Congregation mutations
   const handleSaveCongregation = (name: string, id?: string) => {
-    mockDb.saveCongregation(name, id, { role: userRole, name: `${userRole} (Admin)` });
+    mockDb.saveCongregation(name, id, getOperatorDetails());
     refreshLocalState();
   };
 
   const handleDeleteCongregation = (id: string) => {
-    mockDb.deleteCongregation(id, { role: userRole, name: `${userRole} (Admin)` });
+    mockDb.deleteCongregation(id, getOperatorDetails());
     refreshLocalState();
   };
 
@@ -91,7 +103,7 @@ function App() {
     memberData: Omit<Member, 'id' | 'account_number' | 'created_at'>,
     beneficiariesData: Omit<Beneficiary, 'id' | 'member_id'>[]
   ) => {
-    mockDb.saveMember(memberData, beneficiariesData, { role: userRole, name: `${userRole} (Admin)` });
+    mockDb.saveMember(memberData, beneficiariesData, getOperatorDetails());
     refreshLocalState();
   };
 
@@ -100,50 +112,51 @@ function App() {
     memberData: Omit<Member, 'id' | 'account_number' | 'created_at'>,
     beneficiariesData: Omit<Beneficiary, 'id' | 'member_id'>[]
   ) => {
-    mockDb.editMember(id, memberData, beneficiariesData, { role: userRole, name: `${userRole} (Admin)` });
+    mockDb.editMember(id, memberData, beneficiariesData, getOperatorDetails());
     refreshLocalState();
   };
 
   // 3. Transaction mutations (deposit, withdrawal, share_purchase)
   const handlePostTransaction = (txData: { member_id: string; type: 'deposit' | 'withdrawal' | 'share_purchase'; amount: number; description: string; reference?: string; notes?: string }) => {
-    mockDb.postTransaction(txData, { role: userRole, name: `${userRole} Operator` });
+    mockDb.postTransaction(txData, getOperatorDetails());
     refreshLocalState();
   };
 
   // 4. Loans mutations
   const handleApplyLoan = (loanData: { member_id: string; member_name: string; principal: number; interest_rate: number; term_months: number; purpose: string; collateral: string }) => {
-    mockDb.applyForLoan(loanData, { role: userRole, name: `${userRole} User` });
+    mockDb.applyForLoan(loanData, getOperatorDetails());
     refreshLocalState();
   };
 
   const handleUpdateLoanStatus = (id: string, status: 'approved' | 'rejected' | 'disbursed') => {
-    mockDb.updateLoanStatus(id, status, { role: userRole, name: `${userRole} Approver` });
+    mockDb.updateLoanStatus(id, status, getOperatorDetails());
     refreshLocalState();
   };
 
   const handleRepayLoan = (id: string, amount: number) => {
-    mockDb.repayLoan(id, amount, { role: userRole, name: `${userRole} User` });
+    mockDb.repayLoan(id, amount, getOperatorDetails());
     refreshLocalState();
   };
 
   // 5. Guarantor mutations
   const handleAddGuarantor = (guarantorData: { loan_id: string; member_id?: string; full_name: string; phone_number: string; relationship: string; amount: number }) => {
-    mockDb.saveGuarantor(guarantorData, { role: userRole, name: `${userRole} Operator` });
+    mockDb.saveGuarantor(guarantorData, getOperatorDetails());
     refreshLocalState();
   };
 
   // 6. Shares & Dividends mutations
   const handleDistributeDividends = (percentage: number) => {
-    mockDb.distributeDividends(percentage, { role: userRole, name: `${userRole} Accountant` });
+    mockDb.distributeDividends(percentage, getOperatorDetails());
     refreshLocalState();
   };
 
   // 7. Journal posting mutations
   const handlePostJournalEntry = (entry: Omit<JournalEntry, 'id' | 'date'>) => {
-    mockDb.postJournalVoucher(entry, { role: userRole, name: `${userRole} Accountant` });
+    mockDb.postJournalVoucher(entry, getOperatorDetails());
     refreshLocalState();
   };
 
+  // 8. MoMo mutations
   const handleCreateMoMo = (tx: { direction: 'collection' | 'payout'; network: string; member_id?: string; amount: number; phone_number: string; purpose: string; reference: string }) => {
     mockDb.createMoMoTransaction({
       type: tx.direction,
@@ -153,36 +166,48 @@ function App() {
       phone_number: tx.phone_number,
       purpose: tx.purpose,
       reference: tx.reference
-    }, { role: userRole, name: `${userRole} Operator` });
+    }, getOperatorDetails());
     refreshLocalState();
   };
 
-  // 9. SMS notifications mutations
+  // 9. SMS gateway mutations
   const handleUpdateTemplate = (type: string, content: string) => {
-    mockDb.saveSMSTemplate(type, content, { role: userRole, name: `${userRole} Operator` });
+    // kept for SMSNotification back-compatibility trigger
+    mockDb.saveSMSTemplate({ name: type + ' Template', event: type, body: content, recipient_type: 'Member' }, undefined, getOperatorDetails());
     refreshLocalState();
   };
 
   const handleUpdateSettings = (settings: any) => {
-    mockDb.saveSMSSettings(settings, { role: userRole, name: `${userRole} Operator` });
+    mockDb.saveSMSSettings(settings, getOperatorDetails());
     refreshLocalState();
   };
 
   const handleTopUpSMSWallet = (amount: number) => {
-    mockDb.topUpSMSWallet(amount, { role: userRole, name: `${userRole} Operator` });
+    mockDb.topUpSMSWallet(amount, getOperatorDetails());
     refreshLocalState();
   };
 
-  // 10. Database reset
+  // 10. Staff roles assignment
+  const handleAssignRole = (email: string, roleName: string, fullName?: string) => {
+    mockDb.assignUserRole(email, roleName, fullName, getOperatorDetails());
+    refreshLocalState();
+  };
+
+  const handleRevokeRole = (email: string) => {
+    mockDb.revokeUserRole(email, getOperatorDetails());
+    refreshLocalState();
+  };
+
+  // 11. Database reset
   const handleResetDb = () => {
     mockDb.resetDatabase();
     refreshLocalState();
   };
 
-  // Access Control Helpers
+  // Access Control verification
   const canAccessTab = (tab: string): boolean => {
-    if (userRole === 'Super Admin' || userRole === 'Administrator') return true;
-    
+    if (userRole === 'Super Administrator' || userRole === 'Administrator') return true;
+
     switch (tab) {
       case 'dashboard':
       case 'congregations':
@@ -196,11 +221,12 @@ function App() {
       case 'accounting':
         return userRole === 'Accountant';
       case 'momo':
-        return userRole === 'Accountant' || userRole === 'Collection Officer';
+        return userRole === 'Accountant' || userRole === 'Collections Officer';
       case 'sms':
-        return userRole === 'Accountant' || userRole === 'Administrator' || userRole === 'Super Admin';
+        return userRole === 'Accountant' || userRole === 'Administrator' || userRole === 'Super Administrator';
+      case 'staff':
       case 'audit':
-        return false; // locked to Admins
+        return false; // restricted to Admins (already allowed in the top check)
       default:
         return false;
     }
@@ -213,7 +239,14 @@ function App() {
     }
   };
 
-  const roles = ['Super Admin', 'Administrator', 'Accountant', 'Loan Officer', 'Collection Officer', 'Member'];
+  const roles = [
+    'Super Administrator',
+    'Administrator',
+    'Accountant',
+    'Loan Officer',
+    'Collections Officer',
+    'Member'
+  ];
 
   return (
     <div className="app-container">
@@ -319,13 +352,21 @@ function App() {
             </div>
           )}
 
-          {(userRole === 'Super Admin' || userRole === 'Administrator') && (
-            <div 
-              className={`sidebar-item ${selectedTab === 'audit' ? 'active' : ''}`}
-              onClick={() => handleTabClick('audit')}
-            >
-              <ShieldCheck size={18} /> Compliance & Audits
-            </div>
+          {(userRole === 'Super Administrator' || userRole === 'Administrator') && (
+            <>
+              <div 
+                className={`sidebar-item ${selectedTab === 'staff' ? 'active' : ''}`}
+                onClick={() => handleTabClick('staff')}
+              >
+                <Key size={18} /> Staff User Roles
+              </div>
+              <div 
+                className={`sidebar-item ${selectedTab === 'audit' ? 'active' : ''}`}
+                onClick={() => handleTabClick('audit')}
+              >
+                <ShieldCheck size={18} /> Compliance & Audits
+              </div>
+            </>
           )}
         </div>
 
@@ -336,7 +377,7 @@ function App() {
             </div>
             <div className="user-badge-info">
               <span className="user-badge-name">Mustard Seed Staff</span>
-              <span className="user-badge-role">{userRole}</span>
+              <span className="user-badge-role" style={{ fontSize: '10px' }}>{userRole}</span>
             </div>
           </div>
         </div>
@@ -487,7 +528,17 @@ function App() {
             />
           )}
 
-          {selectedTab === 'audit' && (userRole === 'Super Admin' || userRole === 'Administrator') && (
+          {selectedTab === 'staff' && (userRole === 'Super Administrator' || userRole === 'Administrator') && (
+            <UserRolesManagement
+              staffUsers={staffUsers}
+              members={members}
+              onAssignRole={handleAssignRole}
+              onRevokeRole={handleRevokeRole}
+              userRole={userRole}
+            />
+          )}
+
+          {selectedTab === 'audit' && (userRole === 'Super Administrator' || userRole === 'Administrator') && (
             <SecurityAudit
               auditLogs={auditLogs}
               onResetDb={handleResetDb}

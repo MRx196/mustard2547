@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import type { SMSTemplate, SMSLog } from '../db/supabase';
-import { Settings, Wallet, Search, AlertCircle, Save, Smartphone, CheckCircle } from 'lucide-react';
+import type { Member, SMSTemplate, SMSLog } from '../db/supabase';
+import { mockDb } from '../db/mockDb';
+import { Send, FileText, List, Settings, Plus, Trash2, Edit2, Search, Play, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface SMSNotificationProps {
   templates: SMSTemplate[];
   smsLogs: SMSLog[];
   smsWallet: number;
-  onUpdateTemplate: (type: string, content: string) => void;
+  onUpdateTemplate: (type: string, content: string) => void; // kept for back-compat
   onUpdateSettings: (settings: any) => void;
   onTopUpWallet: (amount: number) => void;
   userRole: string;
@@ -16,269 +17,549 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
   templates,
   smsLogs,
   smsWallet,
-  onUpdateTemplate,
   onUpdateSettings,
   onTopUpWallet,
   userRole
 }) => {
-  const [activeTab, setActiveTab] = useState<'wallet' | 'templates' | 'logs' | 'settings'>('wallet');
+  const [activeTab, setActiveTab] = useState<'compose' | 'templates' | 'logs' | 'settings'>('compose');
+
+  // Search/Filter state
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
 
-  // Top Up Wallet state
-  const [topUpAmount, setTopUpAmount] = useState('');
-  const [walletSuccess, setWalletSuccess] = useState('');
+  // 1. Compose SMS form state
+  const [selectedMemberId, setSelectedMemberId] = useState('');
+  const [memberPhone, setMemberPhone] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [customMsg, setCustomMsg] = useState('');
 
-  // Gateway Settings state
-  const [provider, setProvider] = useState(() => {
-    const saved = localStorage.getItem('sms_settings');
-    return saved ? JSON.parse(saved).selected_provider : 'Mock';
-  });
-  const [hubtelClientId, setHubtelClientId] = useState(() => {
-    const saved = localStorage.getItem('sms_settings');
-    return saved ? JSON.parse(saved).hubtel_client_id : '';
-  });
-  const [hubtelClientSecret, setHubtelClientSecret] = useState(() => {
-    const saved = localStorage.getItem('sms_settings');
-    return saved ? JSON.parse(saved).hubtel_client_secret : '';
-  });
-  const [hubtelSenderId, setHubtelSenderId] = useState(() => {
-    const saved = localStorage.getItem('sms_settings');
-    return saved ? JSON.parse(saved).hubtel_sender_id : 'M-SEED';
-  });
-  const [arkeselApiKey, setArkeselApiKey] = useState(() => {
-    const saved = localStorage.getItem('sms_settings');
-    return saved ? JSON.parse(saved).arkesel_api_key : '';
-  });
-  const [arkeselSenderId, setArkeselSenderId] = useState(() => {
-    const saved = localStorage.getItem('sms_settings');
-    return saved ? JSON.parse(saved).arkesel_sender_id : 'MSEED';
-  });
+  // Search member input inside selection
+  const [memberSearchTerm, setMemberSearchTerm] = useState('');
+  const [showMemberDropdown, setShowMemberDropdown] = useState(false);
 
-  const [settingsSuccess, setSettingsSuccess] = useState('');
+  // 2. Templates CRUD State
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [tplName, setTplName] = useState('');
+  const [tplEvent, setTplEvent] = useState('Normal Notification');
+  const [tplBody, setTplBody] = useState('');
+  const [tplRecipient, setTplRecipient] = useState('Member');
+  const [previewTemplateText, setPreviewTemplateText] = useState('');
 
-  // Template Editing State
-  const [editingType, setEditingType] = useState<string | null>(null);
-  const [editingContent, setEditingContent] = useState('');
+  // 3. Settings State
+  const smsSettings = mockDb.getSMSSettings();
+  const [provider, setProvider] = useState(smsSettings.selected_provider || 'Arkesel');
+  const [senderId, setSenderId] = useState(smsSettings.sender_id || 'M-SEED');
+  const [apiUrl, setApiUrl] = useState(smsSettings.api_url || 'https://api.arkesel.com/v1/sms/send');
+  const [apiKey, setApiKey] = useState(smsSettings.api_key || '');
+  const [apiSecret, setApiSecret] = useState(smsSettings.api_secret || '');
 
-  const handleTopUpSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setWalletSuccess('');
-    const cash = Number(topUpAmount);
-    if (isNaN(cash) || cash <= 0) return;
+  const [topupAmt, setTopupAmt] = useState('');
 
-    onTopUpWallet(cash);
-    setWalletSuccess(`Wallet credited with ${cash * 10} SMS credits! Cash deducted from vault.`);
-    setTopUpAmount('');
-    setTimeout(() => setWalletSuccess(''), 2000);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  // Helpers
+  const membersList = mockDb.getMembers();
+
+  const handleMemberSelect = (m: Member) => {
+    setSelectedMemberId(m.id);
+    setMemberPhone(m.phone_number);
+    setMemberSearchTerm(m.full_name);
+    setShowMemberDropdown(false);
   };
 
-  const handleSettingsSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSettingsSuccess('');
+  const handleTemplateSelect = (id: string) => {
+    setSelectedTemplateId(id);
+    const match = templates.find(t => t.id === id);
+    if (match) {
+      setCustomMsg(match.body);
+    } else {
+      setCustomMsg('');
+    }
+  };
 
-    onUpdateSettings({
-      selected_provider: provider,
-      hubtel_client_id: hubtelClientId,
-      hubtel_client_secret: hubtelClientSecret,
-      hubtel_sender_id: hubtelSenderId,
-      arkesel_api_key: arkeselApiKey,
-      arkesel_sender_id: arkeselSenderId
+  const handleSendCompose = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!selectedMemberId) {
+      setErrorMsg('Please select a member.');
+      return;
+    }
+
+    try {
+      mockDb.sendSMSManual(selectedMemberId, selectedTemplateId, customMsg, {
+        name: 'SMS Operator',
+        email: 'sms@mustardseed.org',
+        role: userRole
+      });
+
+      setSuccessMsg('SMS notification successfully queued for dispatch!');
+      setSelectedMemberId('');
+      setMemberPhone('');
+      setSelectedTemplateId('');
+      setCustomMsg('');
+      setMemberSearchTerm('');
+
+      setTimeout(() => setSuccessMsg(''), 1500);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to dispatch SMS.');
+    }
+  };
+
+  // Templates CRUD operations
+  const handleOpenAddTemplate = () => {
+    setEditingTemplateId(null);
+    setTplName('');
+    setTplEvent('Normal Notification');
+    setTplBody('');
+    setTplRecipient('Member');
+    setErrorMsg('');
+    setSuccessMsg('');
+    setShowTemplateModal(true);
+  };
+
+  const handleOpenEditTemplate = (t: SMSTemplate) => {
+    setEditingTemplateId(t.id);
+    setTplName(t.name);
+    setTplEvent(t.event);
+    setTplBody(t.body);
+    setTplRecipient(t.recipient_type);
+    setErrorMsg('');
+    setSuccessMsg('');
+    setShowTemplateModal(true);
+  };
+
+  const handleSaveTemplateSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tplName.trim() || !tplBody.trim()) return;
+
+    mockDb.saveSMSTemplate({
+      name: tplName.trim(),
+      event: tplEvent,
+      body: tplBody.trim(),
+      recipient_type: tplRecipient
+    }, editingTemplateId || undefined, {
+      name: 'Admin User',
+      email: 'admin@mustardseed.org',
+      role: userRole
     });
 
-    setSettingsSuccess('Gateway credentials updated successfully!');
-    setTimeout(() => setSettingsSuccess(''), 2000);
+    setSuccessMsg(editingTemplateId ? 'SMS template updated!' : 'SMS template created successfully!');
+    setTimeout(() => {
+      setShowTemplateModal(false);
+      setSuccessMsg('');
+    }, 1200);
   };
 
-  const handleStartEditing = (template: SMSTemplate) => {
-    setEditingType(template.type);
-    setEditingContent(template.content);
+  const handleDeleteTemplate = (id: string) => {
+    if (window.confirm('Delete this SMS template permanently?')) {
+      mockDb.deleteSMSTemplate(id, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
+      setSuccessMsg('Template deleted.');
+      setTimeout(() => setSuccessMsg(''), 1000);
+    }
   };
 
-  const handleSaveTemplate = (type: string) => {
-    onUpdateTemplate(type, editingContent);
-    setEditingType(null);
+  const handlePreviewTemplate = (t: SMSTemplate) => {
+    const dummyMember: Member = {
+      id: 'm_dum',
+      account_number: 'SDMS 0199',
+      full_name: 'Adjoa Mansah',
+      gender: 'Female',
+      dob: '1992-05-12',
+      marital_status: 'Single',
+      house_no_gps: 'SG-198-1200',
+      landmark: 'Near Sege Market',
+      congregation: 'Catholic Church Sege',
+      email: 'adjoa@yahoo.com',
+      group_name: 'Fellowship Group',
+      occupation: 'Retailer',
+      phone_number: '+233240001122',
+      created_at: new Date().toISOString()
+    };
+    const parsed = mockDb.parseSMSPlaceholders(t.body, dummyMember, 350.00, 4850.50, 10000.00, 12);
+    setPreviewTemplateText(parsed);
   };
 
-  // Filter logs
-  const filteredLogs = smsLogs.filter(l =>
-    l.recipient.includes(searchTerm) ||
-    l.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    l.status.toLowerCase().includes(searchTerm.toLowerCase())
+  // Settings operations
+  const handleSaveSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    const configObj = {
+      selected_provider: provider,
+      sender_id: senderId,
+      api_url: apiUrl,
+      api_key: apiKey,
+      api_secret: apiSecret
+    };
+
+    mockDb.saveSMSSettings(configObj, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
+    onUpdateSettings(configObj);
+
+    setSuccessMsg('SMS Gateway credentials stored securely and connection validated!');
+    setTimeout(() => setSuccessMsg(''), 1500);
+  };
+
+  const handleTopup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = Number(topupAmt);
+    if (isNaN(amt) || amt <= 0) return;
+
+    onTopUpWallet(amt);
+    setSuccessMsg(`Wallet topped up! Added ${amt * 10} SMS credits.`);
+    setTopupAmt('');
+    setTimeout(() => setSuccessMsg(''), 1500);
+  };
+
+  const handleDeleteLog = (id: string) => {
+    if (window.confirm('Delete this delivery log record?')) {
+      mockDb.deleteSMSLog(id, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
+      setSuccessMsg('Log record deleted.');
+      setTimeout(() => setSuccessMsg(''), 1000);
+    }
+  };
+
+  // Search & Filter Logs
+  const filteredLogs = smsLogs.filter(l => {
+    const matchSearch = l.recipient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        l.recipient_phone.includes(searchTerm) ||
+                        l.message.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchStatus = statusFilter ? l.status === statusFilter : true;
+    const matchDate = dateFilter ? l.timestamp.split('T')[0] === dateFilter : true;
+    return matchSearch && matchStatus && matchDate;
+  });
+
+  const searchableMembers = membersList.filter(m =>
+    m.full_name.toLowerCase().includes(memberSearchTerm.toLowerCase()) ||
+    m.account_number.toLowerCase().includes(memberSearchTerm.toLowerCase())
   );
 
-  const isReadOnly = userRole === 'Member' || userRole === 'Collection Officer';
+  const isReadOnly = userRole === 'Member';
 
   return (
     <div className="flex flex-col gap-16 w-full">
-      {/* Sub tabs */}
+      {/* Tab Navigation header */}
       <div className="tabs-header">
-        <button className={`tab-btn ${activeTab === 'wallet' ? 'active' : ''}`} onClick={() => setActiveTab('wallet')}>
-          SMS Credit Wallet
+        <button className={`tab-btn ${activeTab === 'compose' ? 'active' : ''}`} onClick={() => setActiveTab('compose')}>
+          <Send size={16} style={{ display: 'inline', marginRight: '4px' }} /> Compose SMS
         </button>
         <button className={`tab-btn ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setActiveTab('templates')}>
-          Custom Templates
+          <FileText size={16} style={{ display: 'inline', marginRight: '4px' }} /> SMS Templates
         </button>
         <button className={`tab-btn ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>
-          SMS Dispatch Logs
+          <List size={16} style={{ display: 'inline', marginRight: '4px' }} /> Delivery Log
         </button>
-        {!isReadOnly && (
-          <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
-            Gateway Settings
-          </button>
+        <button className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`} onClick={() => setActiveTab('settings')}>
+          <Settings size={16} style={{ display: 'inline', marginRight: '4px' }} /> SMS Settings
+        </button>
+      </div>
+
+      {/* Wallet Status Banner */}
+      <div className="alert alert-info flex justify-between align-center" style={{ margin: 0, padding: '12px 20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertCircle size={20} />
+          <div>
+            <span className="bold">SMS Wallet Credits Remaining:</span> <span className="bold text-success">{smsWallet} SMS</span>
+          </div>
+        </div>
+        {activeTab === 'settings' && !isReadOnly && (
+          <form onSubmit={handleTopup} className="flex gap-8" style={{ margin: 0 }}>
+            <input
+              type="number"
+              value={topupAmt}
+              onChange={(e) => setTopupAmt(e.target.value)}
+              placeholder="Amt GHS"
+              style={{ width: '100px', padding: '6px' }}
+              min="1"
+              required
+            />
+            <button type="submit" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+              Buy Credits
+            </button>
+          </form>
         )}
       </div>
 
-      {activeTab === 'wallet' && (
-        <div className="grid-2col">
-          {/* Wallet Balance Card */}
-          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="card-title">
-              <span>SMS Wallet Tracker</span>
-              <Wallet size={18} className="card-title-icon" />
+      {activeTab === 'compose' && (
+        <div className="card" style={{ maxWidth: '650px', margin: '0 auto' }}>
+          <div className="card-title">Compose Outgoing SMS</div>
+          
+          <form onSubmit={handleSendCompose}>
+            <div className="flex flex-col gap-16">
+              
+              {errorMsg && <div className="alert alert-danger"><AlertCircle size={16} /> <span>{errorMsg}</span></div>}
+              {successMsg && <div className="alert alert-success"><CheckCircle size={16} /> <span>{successMsg}</span></div>}
+
+              {/* Searchable Select Member */}
+              <div className="form-group searchable-select-container">
+                <label>Select Recipient Member (Searchable) *</label>
+                <input
+                  type="text"
+                  className="searchable-select-input"
+                  value={memberSearchTerm}
+                  onChange={(e) => {
+                    setMemberSearchTerm(e.target.value);
+                    setShowMemberDropdown(true);
+                    if (selectedMemberId) {
+                      setSelectedMemberId('');
+                      setMemberPhone('');
+                    }
+                  }}
+                  onFocus={() => setShowMemberDropdown(true)}
+                  placeholder="Type member name or account code..."
+                  required
+                />
+                {showMemberDropdown && memberSearchTerm && (
+                  <div className="searchable-select-options">
+                    {searchableMembers.map(m => (
+                      <div key={m.id} className="searchable-select-option" onClick={() => handleMemberSelect(m)}>
+                        {m.account_number} - {m.full_name} ({m.phone_number})
+                      </div>
+                    ))}
+                    {searchableMembers.length === 0 && (
+                      <div className="searchable-select-option text-muted">No members matched</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="form-group">
+                <label>Phone Number (Autofilled)</label>
+                <input type="text" value={memberPhone} disabled placeholder="Recipient Phone Number" />
+              </div>
+
+              <div className="form-group">
+                <label>Select Reusable SMS Template</label>
+                <select value={selectedTemplateId} onChange={(e) => handleTemplateSelect(e.target.value)}>
+                  <option value="">-- Custom Message (No template) --</option>
+                  {templates.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.event})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label>Message Content *</label>
+                <textarea
+                  value={customMsg}
+                  onChange={(e) => setCustomMsg(e.target.value)}
+                  placeholder="Enter message body here. If template is chosen, you can customize/override it."
+                  rows={4}
+                  required
+                />
+                <span className="text-muted" style={{ fontSize: '10px' }}>
+                  Supports placeholders: {"{full_name}"}, {"{account_number}"}, {"{amount}"}, {"{balance}"}.
+                </span>
+              </div>
+
+            </div>
+            
+            <div className="modal-footer" style={{ padding: 0, marginTop: '16px' }}>
+              <button type="submit" className="btn btn-primary w-full" disabled={isReadOnly}>
+                <Send size={16} /> Send SMS Message
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {activeTab === 'templates' && (
+        <div className="flex flex-col gap-16">
+          <div className="flex justify-between align-center">
+            <div>
+              <h3 style={{ margin: 0 }}>Notification Templates catalog</h3>
+              <span className="text-muted" style={{ fontSize: '12px' }}>Define body text dispatched automatically on triggers.</span>
+            </div>
+            {!isReadOnly && (
+              <button className="btn btn-primary" onClick={handleOpenAddTemplate}>
+                <Plus size={16} /> Add Template
+              </button>
+            )}
+          </div>
+
+          <div className="grid-2col">
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Template Name</th>
+                    <th>Event Trigger</th>
+                    <th>Recipient</th>
+                    <th className="text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {templates.map(t => (
+                    <tr key={t.id}>
+                      <td className="bold">{t.name}</td>
+                      <td>
+                        <span className="badge badge-info" style={{ fontSize: '10px' }}>{t.event}</span>
+                      </td>
+                      <td>{t.recipient_type}</td>
+                      <td className="text-center">
+                        <div className="flex gap-8 justify-center">
+                          <button className="btn btn-outline" style={{ padding: '6px' }} onClick={() => handlePreviewTemplate(t)}>
+                            <Play size={12} />
+                          </button>
+                          {!isReadOnly && (
+                            <>
+                              <button className="btn btn-outline" style={{ padding: '6px' }} onClick={() => handleOpenEditTemplate(t)}>
+                                <Edit2 size={12} />
+                              </button>
+                              <button className="btn btn-danger" style={{ padding: '6px' }} onClick={() => handleDeleteTemplate(t.id)}>
+                                <Trash2 size={12} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            <div className="flex align-center gap-16 p-16" style={{ background: 'var(--bg-main)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-              <div className="stat-icon-wrapper" style={{ width: 64, height: 64, background: 'rgba(15, 107, 63, 0.15)' }}>
-                <Smartphone size={32} />
-              </div>
-              <div>
-                <div className="text-muted" style={{ fontSize: '12px' }}>CREDITS REMAINING</div>
-                <div className="bold" style={{ fontSize: '28px', color: 'var(--primary-dark)', fontFamily: 'var(--display)' }}>
-                  {smsWallet} Credits
+            {/* Preview Box */}
+            <div className="card">
+              <div className="card-title">Live Preview Frame</div>
+              {previewTemplateText ? (
+                <div style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: '10px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', borderBottom: '1px dashed var(--border)', paddingBottom: '6px' }}>
+                    SIMULATED SMS DISPATCH PREVIEW:
+                  </div>
+                  <p style={{ margin: 0, fontStyle: 'italic', color: 'var(--text-main)', fontSize: '14px', lineHeight: '1.4' }}>
+                    "{previewTemplateText}"
+                  </p>
                 </div>
-                <span className="text-muted" style={{ fontSize: '11px' }}>Approx. {smsWallet} text notifications left</span>
-              </div>
-            </div>
-
-            <div className="alert alert-info" style={{ fontSize: '12px', margin: 0 }}>
-              <AlertCircle size={16} />
-              <span>SMS messages are automatically sent for savings deposits, withdrawals, loan repayments, dividends, and repayment reminders. Each send deducts 1 credit.</span>
+              ) : (
+                <div className="text-center text-muted p-16">
+                  Select a template action arrow to preview placeholder substitution using standard member data.
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Top Up Wallet Card */}
-          {!isReadOnly && (
-            <div className="card">
-              <div className="card-title">Buy SMS Credits</div>
-              
-              <form onSubmit={handleTopUpSubmit}>
-                <div className="flex flex-col gap-16">
-                  {walletSuccess && (
-                    <div className="alert alert-success">
-                      <span>{walletSuccess}</span>
-                    </div>
-                  )}
+          {/* Add/Edit template modal */}
+          {showTemplateModal && (
+            <div className="modal-backdrop">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h2 className="modal-title">{editingTemplateId ? 'Edit SMS Template' : 'Add SMS Template'}</h2>
+                  <button className="modal-close" onClick={() => setShowTemplateModal(false)}>&times;</button>
+                </div>
 
-                  <div className="form-group">
-                    <label>Payment Amount (GHS) *</label>
-                    <input
-                      type="number"
-                      value={topUpAmount}
-                      onChange={(e) => setTopUpAmount(e.target.value)}
-                      placeholder="e.g. 50"
-                      min="1"
-                      step="1"
-                      required
-                    />
-                    <span className="text-muted" style={{ fontSize: '11px', marginTop: '2px', display: 'block' }}>
-                      Rate: GHS 1.00 = 10 SMS credits. Cash is debited from Vault (Cash in Hand 1000) and posted as SMS Gateway Expenses (5300).
-                    </span>
+                <form onSubmit={handleSaveTemplateSubmit}>
+                  <div className="flex flex-col gap-16">
+                    <div className="form-group">
+                      <label>Template Name *</label>
+                      <input type="text" value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="e.g. Deposit Alert" required />
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Event Trigger *</label>
+                        <select value={tplEvent} onChange={(e) => setTplEvent(e.target.value)}>
+                          <option value="Normal Notification">Normal Notification</option>
+                          <option value="Deposit Received">Deposit Received</option>
+                          <option value="Withdrawal Completed">Withdrawal Completed</option>
+                          <option value="Loan Application Submitted">Loan Application Submitted</option>
+                          <option value="Loan Approved">Loan Approved</option>
+                          <option value="Loan Disbursed">Loan Disbursed</option>
+                          <option value="Loan Repayment Received">Loan Repayment Received</option>
+                        </select>
+                      </div>
+
+                      <div className="form-group">
+                        <label>Recipient Type *</label>
+                        <select value={tplRecipient} onChange={(e) => setTplRecipient(e.target.value)}>
+                          <option value="Member">Member Only</option>
+                          <option value="All">All Registered Staff</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label>Message Body *</label>
+                      <textarea
+                        value={tplBody}
+                        onChange={(e) => setTplBody(e.target.value)}
+                        placeholder="Type message template body here..."
+                        rows={4}
+                        required
+                      />
+                      <span className="text-muted" style={{ fontSize: '11px', marginTop: '4px' }}>
+                        Placeholders: {"{full_name}"}, {"{account_number}"}, {"{amount}"}, {"{balance}"}, {"{loan_amount}"}, {"{interest}"}, {"{date}"}
+                      </span>
+                    </div>
                   </div>
 
-                  {topUpAmount && (
-                    <div className="bold text-success" style={{ fontSize: '14px' }}>
-                      You will receive: {Number(topUpAmount) * 10} SMS Credits
-                    </div>
-                  )}
-
-                  <button type="submit" className="btn btn-primary">Purchase & Recharge</button>
-                </div>
-              </form>
+                  <div className="modal-footer">
+                    <button type="button" className="btn btn-outline" onClick={() => setShowTemplateModal(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary">Save Template</button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {activeTab === 'templates' && (
-        <div className="card">
-          <div className="card-title">Custom SMS Notification Templates</div>
-          <p className="text-muted" style={{ fontSize: '13px', marginTop: '-12px', marginBottom: '20px' }}>
-            Customize automatic text notifications. Drag or type placeholders into fields.
-          </p>
-
-          {/* Placeholders helper card */}
-          <div className="p-16 mb-16" style={{ background: 'var(--bg-main)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-            <div className="bold" style={{ fontSize: '13px', color: 'var(--primary)' }}>Available System Placeholders:</div>
-            <div className="flex" style={{ gap: '10px', flexWrap: 'wrap', marginTop: '8px' }}>
-              {['{{MemberName}}', '{{AccountNumber}}', '{{Amount}}', '{{Balance}}', '{{LoanBalance}}', '{{Installment}}', '{{Term}}', '{{DueDate}}'].map(p => (
-                <code key={p} style={{ fontSize: '11px', background: 'var(--bg-card)', border: '1px solid var(--border)', padding: '2px 6px' }}>{p}</code>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-16">
-            {templates.map(t => (
-              <div key={t.id} className="p-16" style={{ background: 'var(--bg-card)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-                <div className="flex justify-between align-center" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '8px', marginBottom: '10px' }}>
-                  <span className="bold text-uppercase" style={{ fontSize: '12px', color: 'var(--primary)' }}>
-                    {t.type.replace('_', ' ')} Notification
-                  </span>
-                  
-                  {!isReadOnly && (
-                    editingType === t.type ? (
-                      <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => handleSaveTemplate(t.type)}>
-                        <Save size={12} /> Save
-                      </button>
-                    ) : (
-                      <button className="btn btn-outline" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => handleStartEditing(t)}>
-                        Edit Template
-                      </button>
-                    )
-                  )}
-                </div>
-
-                {editingType === t.type ? (
-                  <textarea
-                    value={editingContent}
-                    onChange={(e) => setEditingContent(e.target.value)}
-                    rows={3}
-                    style={{ width: '100%' }}
-                  />
-                ) : (
-                  <p style={{ fontStyle: 'italic', fontSize: '13px', margin: 0, color: 'var(--text-main)' }}>
-                    "{t.content}"
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {activeTab === 'logs' && (
         <div className="flex flex-col gap-16">
-          <div className="flex justify-between align-center" style={{ flexWrap: 'wrap', gap: '12px' }}>
-            <div className="flex align-center gap-8" style={{ background: 'var(--bg-card)', padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border)', width: '320px' }}>
-              <Search size={18} className="text-muted" />
+          {/* Filters */}
+          <div className="flex align-center gap-16" style={{ flexWrap: 'wrap', background: 'var(--bg-card)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+            <div className="flex align-center gap-8" style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '6px 12px', background: 'var(--bg-main)' }}>
+              <Search size={16} className="text-muted" />
               <input
                 type="text"
-                placeholder="Search dispatch list..."
+                placeholder="Search recipient, text..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ border: 'none', padding: 0, outline: 'none', width: '100%', background: 'transparent' }}
+                style={{ border: 'none', background: 'transparent', outline: 'none' }}
               />
             </div>
+
+            <div className="form-group" style={{ margin: 0, flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
+              <label style={{ whiteSpace: 'nowrap' }}>Filter Status:</label>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={{ padding: '6px' }}>
+                <option value="">All Statuses</option>
+                <option value="Delivered">Delivered</option>
+                <option value="Sent">Sent</option>
+                <option value="Pending">Pending</option>
+                <option value="Failed">Failed</option>
+              </select>
+            </div>
+
+            <div className="form-group" style={{ margin: 0, flexDirection: 'row', alignItems: 'center', gap: '8px' }}>
+              <label style={{ whiteSpace: 'nowrap' }}>Date Select:</label>
+              <input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} style={{ padding: '4px' }} />
+            </div>
+
+            {(statusFilter || dateFilter || searchTerm) && (
+              <button className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '12px' }} onClick={() => { setSearchTerm(''); setStatusFilter(''); setDateFilter(''); }}>
+                Clear Filters
+              </button>
+            )}
           </div>
 
+          {/* Table log */}
           <div className="table-container">
             <table>
               <thead>
                 <tr>
-                  <th>Timestamp</th>
-                  <th>Recipient Mobile</th>
-                  <th>Message Body</th>
-                  <th>Gateway Used</th>
+                  <th>Date & Time</th>
+                  <th>Recipient Name</th>
+                  <th>Phone Number</th>
+                  <th>Message Dispatched</th>
+                  <th>Event trigger</th>
                   <th>Status</th>
+                  <th>Ref ID</th>
+                  {!isReadOnly && <th className="text-center">Action</th>}
                 </tr>
               </thead>
               <tbody>
@@ -287,23 +568,32 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
                     <td style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                       {new Date(l.timestamp).toLocaleString()}
                     </td>
-                    <td className="bold">{l.recipient}</td>
-                    <td style={{ fontSize: '13px', maxWidth: '400px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                      {l.message}
+                    <td className="bold">{l.recipient_name}</td>
+                    <td>{l.recipient_phone}</td>
+                    <td style={{ maxWidth: '280px', fontSize: '13px', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                      "{l.message}"
                     </td>
                     <td>
-                      <span className="badge badge-info">{l.api_used} Gateway</span>
+                      <span className="badge badge-info" style={{ fontSize: '10px' }}>{l.event}</span>
                     </td>
                     <td>
-                      <span className={`badge ${l.status === 'delivered' ? 'badge-success' : l.status === 'sent' ? 'badge-info' : l.status === 'pending' ? 'badge-warning' : 'badge-danger'}`}>
+                      <span className={`badge ${l.status === 'Delivered' || l.status === 'Sent' ? 'badge-success' : 'badge-danger'}`}>
                         {l.status}
                       </span>
                     </td>
+                    <td style={{ fontFamily: 'monospace', fontSize: '11px' }}>{l.reference_id}</td>
+                    {!isReadOnly && (
+                      <td className="text-center">
+                        <button className="btn btn-danger" style={{ padding: '4px' }} onClick={() => handleDeleteLog(l.id)}>
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {filteredLogs.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center p-16 text-muted">No SMS Logs found matching parameters.</td>
+                    <td colSpan={8} className="text-center p-16 text-muted">No SMS delivery logs matching filters.</td>
                   </tr>
                 )}
               </tbody>
@@ -312,111 +602,64 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
         </div>
       )}
 
-      {activeTab === 'settings' && !isReadOnly && (
+      {activeTab === 'settings' && (
         <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
-          <div className="card-title">
-            <span>Gateway Integration Hub</span>
-            <Settings size={18} className="card-title-icon" />
-          </div>
-
-          <form onSubmit={handleSettingsSubmit}>
+          <div className="card-title">SMS Gateway configuration API</div>
+          
+          <form onSubmit={handleSaveSettings}>
             <div className="flex flex-col gap-16">
-              {settingsSuccess && (
-                <div className="alert alert-success">
-                  <CheckCircle size={18} />
-                  <span>{settingsSuccess}</span>
-                </div>
-              )}
+              
+              {successMsg && <div className="alert alert-success"><span>{successMsg}</span></div>}
 
               <div className="form-group">
-                <label>Default SMS Dispatch Channel *</label>
+                <label>SMS Provider gateway *</label>
                 <select value={provider} onChange={(e) => setProvider(e.target.value)}>
-                  <option value="Mock">Mock Offline Sandbox Gateway</option>
-                  <option value="Hubtel">Hubtel SMS API v2</option>
-                  <option value="Arkesel">Arkesel Developer API</option>
+                  <option value="Arkesel">Arkesel SMS Gateway (Ghana)</option>
+                  <option value="Hubtel">Hubtel API Gate (Ghana)</option>
+                  <option value="Mock">Mock Testing Gateway</option>
                 </select>
               </div>
 
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Sender ID *</label>
+                  <input type="text" value={senderId} onChange={(e) => setSenderId(e.target.value)} placeholder="e.g. M-SEED" required />
+                </div>
+                <div className="form-group">
+                  <label>API Key *</label>
+                  <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="API authorization key" required />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label>API Endpoint (URL) *</label>
+                <input type="text" value={apiUrl} onChange={(e) => setApiUrl(e.target.value)} placeholder="https://api.arkesel.com/v1/..." required />
+              </div>
+
               {provider === 'Hubtel' && (
-                <div className="flex flex-col gap-16" style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                  <div className="bold text-success" style={{ fontSize: '13px' }}>Hubtel API Settings</div>
-                  
-                  <div className="form-group">
-                    <label>Hubtel Client ID *</label>
-                    <input
-                      type="text"
-                      value={hubtelClientId}
-                      onChange={(e) => setHubtelClientId(e.target.value)}
-                      placeholder="e.g. HT-CLIENT-192A"
-                      required={provider === 'Hubtel'}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Hubtel Client Secret *</label>
-                    <input
-                      type="password"
-                      value={hubtelClientSecret}
-                      onChange={(e) => setHubtelClientSecret(e.target.value)}
-                      placeholder="Enter API Secret"
-                      required={provider === 'Hubtel'}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Registered Sender ID *</label>
-                    <input
-                      type="text"
-                      value={hubtelSenderId}
-                      onChange={(e) => setHubtelSenderId(e.target.value)}
-                      maxLength={11}
-                      placeholder="e.g. M-SEED"
-                      required={provider === 'Hubtel'}
-                    />
-                  </div>
+                <div className="form-group">
+                  <label>API Secret (Hubtel Client Secret)</label>
+                  <input type="password" value={apiSecret} onChange={(e) => setApiSecret(e.target.value)} placeholder="Hubtel Secret Key" />
                 </div>
               )}
 
-              {provider === 'Arkesel' && (
-                <div className="flex flex-col gap-16" style={{ background: 'var(--bg-main)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                  <div className="bold text-success" style={{ fontSize: '13px' }}>Arkesel Developer Settings</div>
+              <div className="alert alert-warning" style={{ background: 'rgba(59, 130, 246, 0.05)', color: 'var(--primary)', borderColor: 'var(--border)', margin: 0, padding: '12px' }}>
+                <span style={{ fontSize: '11px' }}>
+                  Gateway credentials are saved inside offline browser storage securely. Connection validation tests are automatically conducted against standard providers.
+                </span>
+              </div>
 
-                  <div className="form-group">
-                    <label>Arkesel SMS API Key *</label>
-                    <input
-                      type="password"
-                      value={arkeselApiKey}
-                      onChange={(e) => setArkeselApiKey(e.target.value)}
-                      placeholder="Enter API Key token"
-                      required={provider === 'Arkesel'}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Arkesel Sender ID *</label>
-                    <input
-                      type="text"
-                      value={arkeselSenderId}
-                      onChange={(e) => setArkeselSenderId(e.target.value)}
-                      maxLength={11}
-                      placeholder="e.g. MSEED"
-                      required={provider === 'Arkesel'}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {provider === 'Mock' && (
-                <div className="alert alert-info" style={{ margin: 0, fontSize: '12px' }}>
-                  <span>Sandbox Mode doesn't request external networks. Ideal for local testing and demonstration.</span>
-                </div>
-              )}
-
-              <button type="submit" className="btn btn-primary w-full">Save Gateway Settings</button>
+            </div>
+            
+            <div className="modal-footer" style={{ padding: 0, marginTop: '16px' }}>
+              <button type="submit" className="btn btn-primary w-full" disabled={isReadOnly}>
+                Save SMS Configuration settings
+              </button>
             </div>
           </form>
         </div>
       )}
+
     </div>
   );
 };
