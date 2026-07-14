@@ -62,6 +62,17 @@ const INITIAL_STAFF: StaffUser[] = [
 const INITIAL_AUDIT: AuditLog[] = [];
 
 export const mockDb = {
+  onSyncCallbacks: [] as (() => void)[],
+  registerOnSync: (cb: () => void) => {
+    mockDb.onSyncCallbacks.push(cb);
+  },
+  triggerSyncCallbacks: () => {
+    mockDb.onSyncCallbacks.forEach(cb => cb());
+  },
+  triggerSync: async () => {
+    await mockDb.syncFromSupabase();
+    mockDb.triggerSyncCallbacks();
+  },
   initialize: () => {
     if (!localStorage.getItem('congregations')) localStorage.setItem('congregations', JSON.stringify(INITIAL_CONGREGATIONS));
     if (!localStorage.getItem('members')) localStorage.setItem('members', JSON.stringify(INITIAL_MEMBERS));
@@ -164,7 +175,7 @@ export const mockDb = {
   },
 
   // Auditing Helper
-  logAudit: (
+  logAudit: async (
     operator: { name: string; email: string; role: string },
     action: string,
     module: string,
@@ -190,7 +201,7 @@ export const mockDb = {
     localStorage.setItem('audit_logs', JSON.stringify(logs.slice(0, 500)));
 
     // Sync to Supabase
-    supabase.from('audit_logs').insert(newLog).then();
+    await supabase.from('audit_logs').insert(newLog);
   },
 
   // READERS
@@ -266,7 +277,7 @@ export const mockDb = {
   // MUTATIONS (Synced directly to real Supabase database)
 
   // Congregation CRUD
-  saveCongregation: (name: string, id?: string, operator?: { name: string; email: string; role: string }) => {
+  saveCongregation: async (name: string, id?: string, operator?: { name: string; email: string; role: string }) => {
     const list = mockDb.getCongregations();
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
     
@@ -276,9 +287,9 @@ export const mockDb = {
         const prev = list[idx].name;
         list[idx].name = name;
         localStorage.setItem('congregations', JSON.stringify(list));
-        mockDb.logAudit(activeOperator, 'Edit Congregation', 'Congregations', id, prev, name);
+        await mockDb.logAudit(activeOperator, 'Edit Congregation', 'Congregations', id, prev, name);
         
-        supabase.from('congregations').update({ name }).eq('id', id).then();
+        await supabase.from('congregations').update({ name }).eq('id', id);
       }
     } else {
       const newC: Congregation = {
@@ -288,13 +299,14 @@ export const mockDb = {
       };
       list.push(newC);
       localStorage.setItem('congregations', JSON.stringify(list));
-      mockDb.logAudit(activeOperator, 'Add Congregation', 'Congregations', newC.id, 'N/A', name);
+      await mockDb.logAudit(activeOperator, 'Add Congregation', 'Congregations', newC.id, 'N/A', name);
       
-      supabase.from('congregations').insert(newC).then();
+      await supabase.from('congregations').insert(newC);
     }
+    await mockDb.triggerSync();
   },
 
-  deleteCongregation: (id: string, operator?: { name: string; email: string; role: string }) => {
+  deleteCongregation: async (id: string, operator?: { name: string; email: string; role: string }) => {
     const list = mockDb.getCongregations();
     const match = list.find(c => c.id === id);
     if (!match) return;
@@ -303,13 +315,14 @@ export const mockDb = {
     localStorage.setItem('congregations', JSON.stringify(filtered));
     
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
-    mockDb.logAudit(activeOperator, 'Delete Congregation', 'Congregations', id, match.name, 'Deleted');
+    await mockDb.logAudit(activeOperator, 'Delete Congregation', 'Congregations', id, match.name, 'Deleted');
     
-    supabase.from('congregations').delete().eq('id', id).then();
+    await supabase.from('congregations').delete().eq('id', id);
+    await mockDb.triggerSync();
   },
 
   // Members CRUD
-  saveMember: (
+  saveMember: async (
     memberData: Omit<Member, 'id' | 'account_number' | 'created_at'>,
     beneficiariesData: Omit<Beneficiary, 'id' | 'member_id'>[],
     operator: { name: string; email: string; role: string }
@@ -338,16 +351,17 @@ export const mockDb = {
     const allBens = mockDb.getBeneficiaries();
     localStorage.setItem('beneficiaries', JSON.stringify([...beneficiariesList, ...allBens]));
 
-    mockDb.logAudit(operator, 'Register Member', 'Members', mId, 'N/A', JSON.stringify(newM));
+    await mockDb.logAudit(operator, 'Register Member', 'Members', mId, 'N/A', JSON.stringify(newM));
 
     // Sync to Supabase
-    supabase.from('members').insert(newM).then();
+    await supabase.from('members').insert(newM);
     if (beneficiariesList.length > 0) {
-      supabase.from('beneficiaries').insert(beneficiariesList).then();
+      await supabase.from('beneficiaries').insert(beneficiariesList);
     }
+    await mockDb.triggerSync();
   },
 
-  editMember: (
+  editMember: async (
     id: string,
     memberData: Omit<Member, 'id' | 'account_number' | 'created_at'>,
     beneficiariesData: Omit<Beneficiary, 'id' | 'member_id'>[],
@@ -373,19 +387,19 @@ export const mockDb = {
     }));
     localStorage.setItem('beneficiaries', JSON.stringify([...newBens, ...allBens]));
 
-    mockDb.logAudit(operator, 'Update Member Details', 'Members', id, JSON.stringify(prev), JSON.stringify(members[idx]));
+    await mockDb.logAudit(operator, 'Update Member Details', 'Members', id, JSON.stringify(prev), JSON.stringify(members[idx]));
 
     // Sync to Supabase
-    supabase.from('members').update(memberData).eq('id', id).then();
-    supabase.from('beneficiaries').delete().eq('member_id', id).then(() => {
-      if (newBens.length > 0) {
-        supabase.from('beneficiaries').insert(newBens).then();
-      }
-    });
+    await supabase.from('members').update(memberData).eq('id', id);
+    await supabase.from('beneficiaries').delete().eq('member_id', id);
+    if (newBens.length > 0) {
+      await supabase.from('beneficiaries').insert(newBens);
+    }
+    await mockDb.triggerSync();
   },
 
   // Transactions posting
-  postTransaction: (
+  postTransaction: async (
     txData: { member_id: string; type: 'deposit' | 'withdrawal' | 'share_purchase'; amount: number; description: string; reference?: string; notes?: string },
     operator: { name: string; email: string; role: string }
   ) => {
@@ -451,15 +465,16 @@ export const mockDb = {
     entries.unshift(newEntry);
     localStorage.setItem('journal_entries', JSON.stringify(entries));
 
-    mockDb.logAudit(operator, `Post Transaction (${txData.type})`, 'Savings', txId, 'N/A', JSON.stringify(newTx));
+    await mockDb.logAudit(operator, `Post Transaction (${txData.type})`, 'Savings', txId, 'N/A', JSON.stringify(newTx));
 
     // Sync to Supabase
-    supabase.from('transactions').insert(newTx).then();
-    supabase.from('journal_entries').insert(newEntry).then();
+    await supabase.from('transactions').insert(newTx);
+    await supabase.from('journal_entries').insert(newEntry);
+    await mockDb.triggerSync();
   },
 
   // Loans Application
-  applyForLoan: (
+  applyForLoan: async (
     loanData: { member_id: string; member_name: string; principal: number; interest_rate: number; term_months: number; purpose: string; collateral: string },
     operator: { name: string; email: string; role: string }
   ) => {
@@ -485,13 +500,14 @@ export const mockDb = {
     list.unshift(newLoan);
     localStorage.setItem('loans', JSON.stringify(list));
 
-    mockDb.logAudit(operator, 'Apply Loan', 'Loans', lId, 'N/A', JSON.stringify(newLoan));
+    await mockDb.logAudit(operator, 'Apply Loan', 'Loans', lId, 'N/A', JSON.stringify(newLoan));
 
     // Sync to Supabase
-    supabase.from('loans').insert(newLoan).then();
+    await supabase.from('loans').insert(newLoan);
+    await mockDb.triggerSync();
   },
 
-  updateLoanStatus: (id: string, status: 'approved' | 'rejected' | 'disbursed', operator: { name: string; email: string; role: string }) => {
+  updateLoanStatus: async (id: string, status: 'approved' | 'rejected' | 'disbursed', operator: { name: string; email: string; role: string }) => {
     const loans = mockDb.getLoans();
     const idx = loans.findIndex(l => l.id === id);
     if (idx === -1) return;
@@ -535,17 +551,18 @@ export const mockDb = {
       txs.unshift(tx);
       localStorage.setItem('transactions', JSON.stringify(txs));
 
-      supabase.from('journal_entries').insert(newEntry).then();
-      supabase.from('transactions').insert(tx).then();
+      await supabase.from('journal_entries').insert(newEntry);
+      await supabase.from('transactions').insert(tx);
     }
 
-    mockDb.logAudit(operator, `Update Loan Status to ${status}`, 'Loans', id, prev, status);
+    await mockDb.logAudit(operator, `Update Loan Status to ${status}`, 'Loans', id, prev, status);
 
     // Sync to Supabase
-    supabase.from('loans').update({ status }).eq('id', id).then();
+    await supabase.from('loans').update({ status }).eq('id', id);
+    await mockDb.triggerSync();
   },
 
-  repayLoan: (id: string, amount: number, operator: { name: string; email: string; role: string }) => {
+  repayLoan: async (id: string, amount: number, operator: { name: string; email: string; role: string }) => {
     const loans = mockDb.getLoans();
     const idx = loans.findIndex(l => l.id === id);
     if (idx === -1) return;
@@ -600,16 +617,17 @@ export const mockDb = {
     txs.unshift(tx);
     localStorage.setItem('transactions', JSON.stringify(txs));
 
-    mockDb.logAudit(operator, 'Post Loan Repayment', 'Loans', id, prevBal.toString(), newBal.toString());
+    await mockDb.logAudit(operator, 'Post Loan Repayment', 'Loans', id, prevBal.toString(), newBal.toString());
 
     // Sync to Supabase
-    supabase.from('loans').update({ outstanding_balance: newBal, status: loans[idx].status }).eq('id', id).then();
-    supabase.from('journal_entries').insert(newEntry).then();
-    supabase.from('transactions').insert(tx).then();
+    await supabase.from('loans').update({ outstanding_balance: newBal, status: loans[idx].status }).eq('id', id);
+    await supabase.from('journal_entries').insert(newEntry);
+    await supabase.from('transactions').insert(tx);
+    await mockDb.triggerSync();
   },
 
   // Guarantors mapping
-  saveGuarantor: (
+  saveGuarantor: async (
     guarantorData: { loan_id: string; member_id?: string; full_name: string; phone_number: string; relationship: string; amount: number },
     operator: { name: string; email: string; role: string }
   ) => {
@@ -622,14 +640,15 @@ export const mockDb = {
     list.unshift(newG);
     localStorage.setItem('guarantors', JSON.stringify(list));
 
-    mockDb.logAudit(operator, 'Map Loan Guarantor', 'Loans', newG.id, 'N/A', JSON.stringify(newG));
+    await mockDb.logAudit(operator, 'Map Loan Guarantor', 'Loans', newG.id, 'N/A', JSON.stringify(newG));
 
     // Sync to Supabase
-    supabase.from('guarantors').insert(newG).then();
+    await supabase.from('guarantors').insert(newG);
+    await mockDb.triggerSync();
   },
 
   // Dividends distribution
-  distributeDividends: (percentage: number, operator: { name: string; email: string; role: string }) => {
+  distributeDividends: async (percentage: number, operator: { name: string; email: string; role: string }) => {
     const members = mockDb.getMembers();
     const transactionsList = mockDb.getTransactions();
     
@@ -678,17 +697,18 @@ export const mockDb = {
     entries.unshift(newEntry);
     localStorage.setItem('journal_entries', JSON.stringify(entries));
 
-    mockDb.logAudit(operator, 'Distribute Shares Dividends', 'Shares', 'All Members', 'N/A', `Total Distributed: GHS ${totalPaid}`);
+    await mockDb.logAudit(operator, 'Distribute Shares Dividends', 'Shares', 'All Members', 'N/A', `Total Distributed: GHS ${totalPaid}`);
 
     // Sync to Supabase
     if (newTxs.length > 0) {
-      supabase.from('transactions').insert(newTxs).then();
+      await supabase.from('transactions').insert(newTxs);
     }
-    supabase.from('journal_entries').insert(newEntry).then();
+    await supabase.from('journal_entries').insert(newEntry);
+    await mockDb.triggerSync();
   },
 
   // Journal Voucher Postings
-  postJournalVoucher: (entryData: Omit<JournalEntry, 'id' | 'date'>, operator: { name: string; email: string; role: string }) => {
+  postJournalVoucher: async (entryData: Omit<JournalEntry, 'id' | 'date'>, operator: { name: string; email: string; role: string }) => {
     const entryId = 'j' + generateId();
     const newEntry: JournalEntry = {
       ...entryData,
@@ -704,14 +724,15 @@ export const mockDb = {
     entryData.debits.forEach(d => mockDb.updateCOABalance(d.account_no, d.amount));
     entryData.credits.forEach(c => mockDb.updateCOABalance(c.account_no, -c.amount));
 
-    mockDb.logAudit(operator, 'Post Manual Journal Voucher', 'Accounting', entryId, 'N/A', JSON.stringify(newEntry));
+    await mockDb.logAudit(operator, 'Post Manual Journal Voucher', 'Accounting', entryId, 'N/A', JSON.stringify(newEntry));
 
     // Sync to Supabase
-    supabase.from('journal_entries').insert(newEntry).then();
+    await supabase.from('journal_entries').insert(newEntry);
+    await mockDb.triggerSync();
   },
 
   // MoMo Transaction logs
-  createMoMoTransaction: (
+  createMoMoTransaction: async (
     txData: Omit<MobileMoneyTransaction, 'id' | 'timestamp' | 'status'>,
     operator: { name: string; email: string; role: string }
   ) => {
@@ -737,14 +758,15 @@ export const mockDb = {
       mockDb.updateCOABalance(3100, -amount);
     }
 
-    mockDb.logAudit(operator, `Log MoMo Transaction (${txData.type})`, 'MoMo', txId, 'N/A', JSON.stringify(newMoMo));
+    await mockDb.logAudit(operator, `Log MoMo Transaction (${txData.type})`, 'MoMo', txId, 'N/A', JSON.stringify(newMoMo));
 
     // Sync to Supabase
-    supabase.from('momo_transactions').insert(newMoMo).then();
+    await supabase.from('momo_transactions').insert(newMoMo);
+    await mockDb.triggerSync();
   },
 
   // SMS Notification settings
-  saveSMSTemplate: (template: Omit<SMSTemplate, 'id'>, id?: string, operator?: { name: string; email: string; role: string }) => {
+  saveSMSTemplate: async (template: Omit<SMSTemplate, 'id'>, id?: string, operator?: { name: string; email: string; role: string }) => {
     const list = mockDb.getSMSTemplates();
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
     
@@ -753,9 +775,9 @@ export const mockDb = {
       if (idx !== -1) {
         list[idx] = { ...list[idx], ...template };
         localStorage.setItem('sms_templates', JSON.stringify(list));
-        mockDb.logAudit(activeOperator, 'Modify SMS Template', 'SMS', id, 'Template Body', template.body);
+        await mockDb.logAudit(activeOperator, 'Modify SMS Template', 'SMS', id, 'Template Body', template.body);
         
-        supabase.from('sms_templates').update(template).eq('id', id).then();
+        await supabase.from('sms_templates').update(template).eq('id', id);
       }
     } else {
       const newT: SMSTemplate = {
@@ -764,19 +786,21 @@ export const mockDb = {
       };
       list.push(newT);
       localStorage.setItem('sms_templates', JSON.stringify(list));
-      mockDb.logAudit(activeOperator, 'Create SMS Template', 'SMS', newT.id, 'N/A', template.body);
+      await mockDb.logAudit(activeOperator, 'Create SMS Template', 'SMS', newT.id, 'N/A', template.body);
       
-      supabase.from('sms_templates').insert(newT).then();
+      await supabase.from('sms_templates').insert(newT);
     }
+    await mockDb.triggerSync();
   },
 
-  saveSMSSettings: (settings: any, operator?: { name: string; email: string; role: string }) => {
+  saveSMSSettings: async (settings: any, operator?: { name: string; email: string; role: string }) => {
     localStorage.setItem('sms_settings', JSON.stringify(settings));
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
-    mockDb.logAudit(activeOperator, 'Update SMS API Configuration', 'SMS', 'API Gateways', 'Previous Gateway Settings', JSON.stringify(settings));
+    await mockDb.logAudit(activeOperator, 'Update SMS API Configuration', 'SMS', 'API Gateways', 'Previous Gateway Settings', JSON.stringify(settings));
+    await mockDb.triggerSync();
   },
 
-  topUpSMSWallet: (amount: number, operator: { name: string; email: string; role: string }) => {
+  topUpSMSWallet: async (amount: number, operator: { name: string; email: string; role: string }) => {
     const current = mockDb.getSMSWallet();
     const next = current + amount;
     localStorage.setItem('sms_wallet', next.toString());
@@ -800,22 +824,24 @@ export const mockDb = {
     entries.unshift(newEntry);
     localStorage.setItem('journal_entries', JSON.stringify(entries));
 
-    mockDb.logAudit(operator, 'Top Up SMS Gateway Wallet', 'SMS', 'SMS Wallet', current.toString(), next.toString());
+    await mockDb.logAudit(operator, 'Top Up SMS Gateway Wallet', 'SMS', 'SMS Wallet', current.toString(), next.toString());
 
-    supabase.from('journal_entries').insert(newEntry).then();
+    await supabase.from('journal_entries').insert(newEntry);
+    await mockDb.triggerSync();
   },
 
-  deleteSMSLog: (id: string, operator: { name: string; email: string; role: string }) => {
+  deleteSMSLog: async (id: string, operator: { name: string; email: string; role: string }) => {
     const logs = mockDb.getSMSLogs();
     const filtered = logs.filter(l => l.id !== id);
     localStorage.setItem('sms_logs', JSON.stringify(filtered));
-    mockDb.logAudit(operator, 'Delete SMS Delivery Log', 'SMS', id, 'Log Record', 'Deleted');
+    await mockDb.logAudit(operator, 'Delete SMS Delivery Log', 'SMS', id, 'Log Record', 'Deleted');
 
-    supabase.from('sms_logs').delete().eq('id', id).then();
+    await supabase.from('sms_logs').delete().eq('id', id);
+    await mockDb.triggerSync();
   },
 
   // Staff Roles mutations
-  assignUserRole: (
+  assignUserRole: async (
     profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_user_id?: string },
     operator?: { name: string; email: string; role: string }
   ) => {
@@ -835,9 +861,9 @@ export const mockDb = {
         auth_user_id: profile.auth_user_id || list[idx].auth_user_id
       };
       localStorage.setItem('staff_users', JSON.stringify(list));
-      mockDb.logAudit(activeOperator, 'Change Staff User Details', 'UserRoles', profile.email, prev, JSON.stringify(list[idx]));
+      await mockDb.logAudit(activeOperator, 'Change Staff User Details', 'UserRoles', profile.email, prev, JSON.stringify(list[idx]));
       
-      supabase.from('staff_users').update(profile).eq('email', profile.email).then();
+      await supabase.from('staff_users').update(profile).eq('email', profile.email);
     } else {
       const newU: StaffUser = {
         email: profile.email,
@@ -852,13 +878,14 @@ export const mockDb = {
       };
       list.push(newU);
       localStorage.setItem('staff_users', JSON.stringify(list));
-      mockDb.logAudit(activeOperator, 'Assign Staff User Role', 'UserRoles', profile.email, 'N/A', JSON.stringify(newU));
+      await mockDb.logAudit(activeOperator, 'Assign Staff User Role', 'UserRoles', profile.email, 'N/A', JSON.stringify(newU));
       
-      supabase.from('staff_users').insert(newU).then();
+      await supabase.from('staff_users').insert(newU);
     }
+    await mockDb.triggerSync();
   },
 
-  revokeUserRole: (email: string, operator?: { name: string; email: string; role: string }) => {
+  revokeUserRole: async (email: string, operator?: { name: string; email: string; role: string }) => {
     const list = mockDb.getStaffUsers();
     const match = list.find(u => u.email.toLowerCase() === email.toLowerCase());
     if (!match) return;
@@ -867,9 +894,10 @@ export const mockDb = {
     localStorage.setItem('staff_users', JSON.stringify(filtered));
 
     const activeOperator = operator || { name: 'System', email: 'system@mustardseed.org', role: 'Super Administrator' };
-    mockDb.logAudit(activeOperator, 'Revoke Staff User Access', 'UserRoles', email, match.role, 'Revoked');
+    await mockDb.logAudit(activeOperator, 'Revoke Staff User Access', 'UserRoles', email, match.role, 'Revoked');
 
-    supabase.from('staff_users').delete().eq('email', email).then();
+    await supabase.from('staff_users').delete().eq('email', email);
+    await mockDb.triggerSync();
   },
 
   // LEDGER BALANCES CALCULATORS
@@ -946,20 +974,22 @@ export const mockDb = {
     const nextWallet = Math.max(0, currentWallet - 0.10);
     localStorage.setItem('sms_wallet', nextWallet.toString());
 
-    mockDb.logAudit(operator, 'Send SMS Notification', 'SMS', logId, 'Wallet Deduction: 0.10 GHS', `Message: "${message}"`);
+    await mockDb.logAudit(operator, 'Send SMS Notification', 'SMS', logId, 'Wallet Deduction: 0.10 GHS', `Message: "${message}"`);
 
     // Sync to Supabase
     await supabase.from('sms_logs').insert(newLog);
+    await mockDb.triggerSync();
     return newLog;
   },
 
-  deleteSMSTemplate: (id: string, operator: { name: string; email: string; role: string }) => {
+  deleteSMSTemplate: async (id: string, operator: { name: string; email: string; role: string }) => {
     const list = mockDb.getSMSTemplates();
     const filtered = list.filter(t => t.id !== id);
     localStorage.setItem('sms_templates', JSON.stringify(filtered));
-    mockDb.logAudit(operator, 'Delete SMS Template', 'SMS', id, 'Template', 'Deleted');
+    await mockDb.logAudit(operator, 'Delete SMS Template', 'SMS', id, 'Template', 'Deleted');
 
-    supabase.from('sms_templates').delete().eq('id', id).then();
+    await supabase.from('sms_templates').delete().eq('id', id);
+    await mockDb.triggerSync();
   },
 
   parseSMSPlaceholders: (
@@ -980,7 +1010,7 @@ export const mockDb = {
     return result;
   },
 
-  updateCOABalance: (accountNo: number, amount: number) => {
+  updateCOABalance: async (accountNo: number, amount: number) => {
     const coa = mockDb.getCOA();
     const idx = coa.findIndex(a => a.account_no === accountNo);
     if (idx !== -1) {
@@ -989,7 +1019,7 @@ export const mockDb = {
       localStorage.setItem('chart_of_accounts', JSON.stringify(coa));
 
       // Sync to Supabase
-      supabase.from('chart_of_accounts').update({ balance }).eq('account_no', accountNo).then();
+      await supabase.from('chart_of_accounts').update({ balance }).eq('account_no', accountNo);
     }
   },
 
@@ -1034,5 +1064,6 @@ export const mockDb = {
     
     mockDb.initialize();
     await mockDb.syncFromSupabase();
+    mockDb.triggerSyncCallbacks();
   }
 };

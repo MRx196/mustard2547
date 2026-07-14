@@ -80,7 +80,7 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
     }
   };
 
-  const handleSendCompose = (e: React.FormEvent) => {
+  const handleSendCompose = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -91,7 +91,7 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
     }
 
     try {
-      mockDb.sendSMSManual(selectedMemberId, selectedTemplateId, customMsg, {
+      await mockDb.sendSMSManual(selectedMemberId, selectedTemplateId, customMsg, {
         name: 'SMS Operator',
         email: 'sms@mustardseed.org',
         role: userRole
@@ -133,11 +133,11 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
     setShowTemplateModal(true);
   };
 
-  const handleSaveTemplateSubmit = (e: React.FormEvent) => {
+  const handleSaveTemplateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tplName.trim() || !tplBody.trim()) return;
 
-    mockDb.saveSMSTemplate({
+    await mockDb.saveSMSTemplate({
       name: tplName.trim(),
       event: tplEvent,
       body: tplBody.trim(),
@@ -155,9 +155,9 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
     }, 1200);
   };
 
-  const handleDeleteTemplate = (id: string) => {
+  const handleDeleteTemplate = async (id: string) => {
     if (window.confirm('Delete this SMS template permanently?')) {
-      mockDb.deleteSMSTemplate(id, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
+      await mockDb.deleteSMSTemplate(id, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
       setSuccessMsg('Template deleted.');
       setTimeout(() => setSuccessMsg(''), 1000);
     }
@@ -185,10 +185,9 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
   };
 
   // Settings operations
-  const handleSaveSettings = (e: React.FormEvent) => {
+  const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg('');
-    setSuccessMsg('');
+    if (!apiUrl.trim() || !apiKey.trim() || !senderId.trim()) return;
 
     const configObj = {
       selected_provider: provider,
@@ -198,7 +197,7 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
       api_secret: apiSecret
     };
 
-    mockDb.saveSMSSettings(configObj, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
+    await mockDb.saveSMSSettings(configObj, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
     onUpdateSettings(configObj);
 
     setSuccessMsg('SMS Gateway credentials stored securely and connection validated!');
@@ -216,9 +215,9 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
     setTimeout(() => setSuccessMsg(''), 1500);
   };
 
-  const handleDeleteLog = (id: string) => {
+  const handleDeleteLog = async (id: string) => {
     if (window.confirm('Delete this delivery log record?')) {
-      mockDb.deleteSMSLog(id, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
+      await mockDb.deleteSMSLog(id, { name: 'Admin User', email: 'admin@mustardseed.org', role: userRole });
       setSuccessMsg('Log record deleted.');
       setTimeout(() => setSuccessMsg(''), 1000);
     }

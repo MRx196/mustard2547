@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { mockDb } from './db/mockDb';
 import type { Member, Beneficiary, Transaction, Loan, SMSLog, SMSTemplate, AuditLog, AccountCOA, JournalEntry, MobileMoneyTransaction, Congregation, Guarantor, StaffUser } from './db/supabase';
+import { supabase } from './db/supabase';
 import { keepAliveService } from './services/keepAlive';
 
 // Components
@@ -62,9 +63,30 @@ function App() {
       setCurrentUser(JSON.parse(stored));
     }
     
+    // Register local refresh handler to trigger whenever sync resolves
+    mockDb.registerOnSync(() => {
+      refreshLocalState();
+    });
+
+    // Initial sync
     mockDb.syncFromSupabase().then(() => {
       refreshLocalState();
     });
+
+    // Realtime Postgres changes subscription on all tables
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+        console.log('Realtime change detected in Supabase, synchronizing client database...');
+        mockDb.syncFromSupabase().then(() => {
+          refreshLocalState();
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const refreshLocalState = () => {
@@ -114,77 +136,66 @@ function App() {
   };
 
   // 1. Congregation mutations
-  const handleSaveCongregation = (name: string, id?: string) => {
-    mockDb.saveCongregation(name, id, getOperatorDetails());
-    refreshLocalState();
+  const handleSaveCongregation = async (name: string, id?: string) => {
+    await mockDb.saveCongregation(name, id, getOperatorDetails());
   };
 
-  const handleDeleteCongregation = (id: string) => {
-    mockDb.deleteCongregation(id, getOperatorDetails());
-    refreshLocalState();
+  const handleDeleteCongregation = async (id: string) => {
+    await mockDb.deleteCongregation(id, getOperatorDetails());
   };
 
   // 2. Members mutations
-  const handleAddMember = (
+  const handleAddMember = async (
     memberData: Omit<Member, 'id' | 'account_number' | 'created_at'>,
     beneficiariesData: Omit<Beneficiary, 'id' | 'member_id'>[]
   ) => {
-    mockDb.saveMember(memberData, beneficiariesData, getOperatorDetails());
-    refreshLocalState();
+    await mockDb.saveMember(memberData, beneficiariesData, getOperatorDetails());
   };
 
-  const handleEditMember = (
+  const handleEditMember = async (
     id: string,
     memberData: Omit<Member, 'id' | 'account_number' | 'created_at'>,
     beneficiariesData: Omit<Beneficiary, 'id' | 'member_id'>[]
   ) => {
-    mockDb.editMember(id, memberData, beneficiariesData, getOperatorDetails());
-    refreshLocalState();
+    await mockDb.editMember(id, memberData, beneficiariesData, getOperatorDetails());
   };
 
   // 3. Transaction mutations
-  const handlePostTransaction = (txData: { member_id: string; type: 'deposit' | 'withdrawal' | 'share_purchase'; amount: number; description: string; reference?: string; notes?: string }) => {
-    mockDb.postTransaction(txData, getOperatorDetails());
-    refreshLocalState();
+  const handlePostTransaction = async (txData: { member_id: string; type: 'deposit' | 'withdrawal' | 'share_purchase'; amount: number; description: string; reference?: string; notes?: string }) => {
+    await mockDb.postTransaction(txData, getOperatorDetails());
   };
 
   // 4. Loans mutations
-  const handleApplyLoan = (loanData: { member_id: string; member_name: string; principal: number; interest_rate: number; term_months: number; purpose: string; collateral: string }) => {
-    mockDb.applyForLoan(loanData, getOperatorDetails());
-    refreshLocalState();
+  const handleApplyLoan = async (loanData: { member_id: string; member_name: string; principal: number; interest_rate: number; term_months: number; purpose: string; collateral: string }) => {
+    await mockDb.applyForLoan(loanData, getOperatorDetails());
   };
 
-  const handleUpdateLoanStatus = (id: string, status: 'approved' | 'rejected' | 'disbursed') => {
-    mockDb.updateLoanStatus(id, status, getOperatorDetails());
-    refreshLocalState();
+  const handleUpdateLoanStatus = async (id: string, status: 'approved' | 'rejected' | 'disbursed') => {
+    await mockDb.updateLoanStatus(id, status, getOperatorDetails());
   };
 
-  const handleRepayLoan = (id: string, amount: number) => {
-    mockDb.repayLoan(id, amount, getOperatorDetails());
-    refreshLocalState();
+  const handleRepayLoan = async (id: string, amount: number) => {
+    await mockDb.repayLoan(id, amount, getOperatorDetails());
   };
 
   // 5. Guarantor mutations
-  const handleAddGuarantor = (guarantorData: { loan_id: string; member_id?: string; full_name: string; phone_number: string; relationship: string; amount: number }) => {
-    mockDb.saveGuarantor(guarantorData, getOperatorDetails());
-    refreshLocalState();
+  const handleAddGuarantor = async (guarantorData: { loan_id: string; member_id?: string; full_name: string; phone_number: string; relationship: string; amount: number }) => {
+    await mockDb.saveGuarantor(guarantorData, getOperatorDetails());
   };
 
   // 6. Shares & Dividends mutations
-  const handleDistributeDividends = (percentage: number) => {
-    mockDb.distributeDividends(percentage, getOperatorDetails());
-    refreshLocalState();
+  const handleDistributeDividends = async (percentage: number) => {
+    await mockDb.distributeDividends(percentage, getOperatorDetails());
   };
 
   // 7. Journal posting mutations
-  const handlePostJournalEntry = (entry: Omit<JournalEntry, 'id' | 'date'>) => {
-    mockDb.postJournalVoucher(entry, getOperatorDetails());
-    refreshLocalState();
+  const handlePostJournalEntry = async (entry: Omit<JournalEntry, 'id' | 'date'>) => {
+    await mockDb.postJournalVoucher(entry, getOperatorDetails());
   };
 
   // 8. MoMo mutations
-  const handleCreateMoMo = (tx: { direction: 'collection' | 'payout'; network: string; member_id?: string; amount: number; phone_number: string; purpose: string; reference: string }) => {
-    mockDb.createMoMoTransaction({
+  const handleCreateMoMo = async (tx: { direction: 'collection' | 'payout'; network: string; member_id?: string; amount: number; phone_number: string; purpose: string; reference: string }) => {
+    await mockDb.createMoMoTransaction({
       type: tx.direction,
       network: tx.network,
       member_id: tx.member_id,
@@ -193,40 +204,33 @@ function App() {
       purpose: tx.purpose,
       reference: tx.reference
     }, getOperatorDetails());
-    refreshLocalState();
   };
 
   // 9. SMS mutations
-  const handleUpdateTemplate = (type: string, content: string) => {
-    mockDb.saveSMSTemplate({ name: type + ' Template', event: type, body: content, recipient_type: 'Member' }, undefined, getOperatorDetails());
-    refreshLocalState();
+  const handleUpdateTemplate = async (type: string, content: string) => {
+    await mockDb.saveSMSTemplate({ name: type + ' Template', event: type, body: content, recipient_type: 'Member' }, undefined, getOperatorDetails());
   };
 
-  const handleUpdateSettings = (settings: any) => {
-    mockDb.saveSMSSettings(settings, getOperatorDetails());
-    refreshLocalState();
+  const handleUpdateSettings = async (settings: any) => {
+    await mockDb.saveSMSSettings(settings, getOperatorDetails());
   };
 
-  const handleTopUpSMSWallet = (amount: number) => {
-    mockDb.topUpSMSWallet(amount, getOperatorDetails());
-    refreshLocalState();
+  const handleTopUpSMSWallet = async (amount: number) => {
+    await mockDb.topUpSMSWallet(amount, getOperatorDetails());
   };
 
   // 10. Staff roles assignment
-  const handleAssignRole = (profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_user_id?: string }) => {
-    mockDb.assignUserRole(profile, getOperatorDetails());
-    refreshLocalState();
+  const handleAssignRole = async (profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_user_id?: string }) => {
+    await mockDb.assignUserRole(profile, getOperatorDetails());
   };
 
-  const handleRevokeRole = (email: string) => {
-    mockDb.revokeUserRole(email, getOperatorDetails());
-    refreshLocalState();
+  const handleRevokeRole = async (email: string) => {
+    await mockDb.revokeUserRole(email, getOperatorDetails());
   };
 
   // 11. Database reset
-  const handleResetDb = () => {
-    mockDb.resetDatabase();
-    refreshLocalState();
+  const handleResetDb = async () => {
+    await mockDb.resetDatabase();
   };
 
   // Access Control authorization verification
