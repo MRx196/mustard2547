@@ -160,7 +160,7 @@ export interface StaffUser {
   created_at: string;
   username?: string;
   phone_number?: string;
-  auth_id?: string;
+  auth_id?: string | null;
 }
 
 export interface AuditLog {

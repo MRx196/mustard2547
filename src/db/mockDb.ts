@@ -905,7 +905,7 @@ export const mockDb = {
         username: profile.username,
         phone_number: profile.phone_number,
         status: profile.status,
-        auth_id: profile.auth_id
+        auth_id: profile.auth_id || null
       }).eq('email', profile.email);
       if (error) throw new Error(`Supabase Error (Users): ${error.message} (Code: ${error.code})`);
     } else {
@@ -918,13 +918,23 @@ export const mockDb = {
         created_at: getNowString(),
         username: profile.username || profile.email.split('@')[0],
         phone_number: profile.phone_number || '',
-        auth_id: profile.auth_id || ''
+        auth_id: profile.auth_id || null
       };
       list.push(newU);
       localStorage.setItem('staff_users', JSON.stringify(list));
       await mockDb.logAudit(activeOperator, 'Assign Staff User Role', 'UserRoles', profile.email, 'N/A', JSON.stringify(newU));
       
-      const { error } = await supabase.from('users').insert(newU);
+      const { error } = await supabase.from('users').upsert({
+        email: newU.email,
+        full_name: newU.full_name,
+        role: newU.role,
+        status: newU.status,
+        last_signin: newU.last_signin,
+        created_at: newU.created_at,
+        username: newU.username,
+        phone_number: newU.phone_number,
+        auth_id: newU.auth_id
+      });
       if (error) throw new Error(`Supabase Error (Users): ${error.message} (Code: ${error.code})`);
     }
     await mockDb.triggerSync();

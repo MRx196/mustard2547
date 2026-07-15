@@ -32,7 +32,17 @@ function App() {
 
   // Mandatory Authentication Session State
   const [currentUser, setCurrentUser] = useState<StaffUser | null>(null);
-  const [selectedTab, setSelectedTab] = useState<string>('dashboard');
+  const [selectedTab, setSelectedTab] = useState<string>(() => {
+    return localStorage.getItem('selected_tab') || 'dashboard';
+  });
+  const [initializing, setInitializing] = useState(true);
+
+  // Persist selected navigation tab to localStorage
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('selected_tab', selectedTab);
+    }
+  }, [selectedTab, currentUser]);
 
   // Database States
   const [congregations, setCongregations] = useState<Congregation[]>([]);
@@ -64,46 +74,68 @@ function App() {
     // Start database keep-alive background ping service
     keepAliveService.start();
     
-    // Recover user session from Supabase Auth
-    const checkUserSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session && session.user) {
-        const email = session.user.email;
-        if (email) {
-          const { data: profile } = await supabase.from('users').select('*').eq('email', email).single();
-          if (profile) {
-            setCurrentUser(profile);
-          } else {
-            const userProfile: StaffUser = {
-              email: session.user.email || '',
-              full_name: session.user.user_metadata?.full_name || 'Staff User',
-              role: session.user.user_metadata?.role || 'Auditor',
-              status: 'Active',
-              last_signin: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              username: session.user.email?.split('@')[0],
-              phone_number: '',
-              auth_id: session.user.id
-            };
-            setCurrentUser(userProfile);
+    // Recover user session from Supabase Auth and initial sync
+    const initializeAuthAndData = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          const email = session.user.email;
+          if (email) {
+            const { data: profile } = await supabase.from('users').select('*').eq('email', email).single();
+            let resolvedProfile = profile;
+            
+            if (profile) {
+              if (!profile.auth_id || profile.auth_id !== session.user.id) {
+                await supabase.rpc('link_own_auth_id');
+                profile.auth_id = session.user.id;
+              }
+            } else {
+              resolvedProfile = {
+                email: session.user.email || '',
+                full_name: session.user.user_metadata?.full_name || 'Staff User',
+                role: session.user.user_metadata?.role || 'Auditor',
+                status: 'Active',
+                last_signin: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                username: session.user.email?.split('@')[0],
+                phone_number: '',
+                auth_id: session.user.id
+              };
+            }
+            
+            // Sync live database data BEFORE turning off the loading state
+            await mockDb.syncFromSupabase();
+            refreshLocalState();
+            setCurrentUser(resolvedProfile);
           }
+        } else {
+          setCurrentUser(null);
         }
-      } else {
-        setCurrentUser(null);
+      } catch (err) {
+        console.error('Session initialization error:', err);
+      } finally {
+        setInitializing(false);
       }
     };
-    checkUserSession();
+
+    initializeAuthAndData();
 
     // Listen to Auth State Changes
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
+        setInitializing(true); // Show loader during sign-in sync
         const email = session.user.email;
         if (email) {
           const { data: profile } = await supabase.from('users').select('*').eq('email', email).single();
+          let resolvedProfile = profile;
+          
           if (profile) {
-            setCurrentUser(profile);
+            if (!profile.auth_id || profile.auth_id !== session.user.id) {
+              await supabase.rpc('link_own_auth_id');
+              profile.auth_id = session.user.id;
+            }
           } else {
-            const userProfile: StaffUser = {
+            resolvedProfile = {
               email: session.user.email || '',
               full_name: session.user.user_metadata?.full_name || 'Staff User',
               role: session.user.user_metadata?.role || 'Auditor',
@@ -114,11 +146,16 @@ function App() {
               phone_number: '',
               auth_id: session.user.id
             };
-            setCurrentUser(userProfile);
           }
+          
+          await mockDb.syncFromSupabase();
+          refreshLocalState();
+          setCurrentUser(resolvedProfile);
+          setInitializing(false);
         }
       } else if (event === 'SIGNED_OUT') {
         setCurrentUser(null);
+        localStorage.removeItem('selected_tab'); // Reset navigation tab on logout
       } else if (event === 'PASSWORD_RECOVERY') {
         setIsResettingPassword(true);
       }
@@ -131,11 +168,6 @@ function App() {
     
     // Register local refresh handler to trigger whenever sync resolves
     mockDb.registerOnSync(() => {
-      refreshLocalState();
-    });
-
-    // Initial sync
-    mockDb.syncFromSupabase().then(() => {
       refreshLocalState();
     });
 
@@ -432,6 +464,93 @@ function App() {
             </div>
           </form>
         </div>
+      </div>
+    );
+  }
+
+  // Full-screen Premium Session & Live Data Loading Loader
+  if (initializing) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+        color: '#ffffff',
+        fontFamily: 'Inter, system-ui, sans-serif'
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+          {/* Pulsing Logo Card */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.03)',
+            backdropFilter: 'blur(12px)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            padding: '24px',
+            borderRadius: '24px',
+            boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            animation: 'pulse 2s infinite ease-in-out'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #3b82f6 0%, #0f4c81 100%)',
+              color: 'white',
+              width: '56px',
+              height: '56px',
+              borderRadius: '16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 16px -4px rgba(59, 130, 246, 0.5)'
+            }}>
+              <Landmark size={28} />
+            </div>
+          </div>
+          
+          {/* Titles */}
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ fontSize: '20px', fontWeight: 600, letterSpacing: '-0.025em', margin: '0 0 4px 0', color: '#f8fafc' }}>
+              Mustard Seed Welfare Fund
+            </h2>
+            <p style={{ fontSize: '12px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#94a3b8', margin: 0 }}>
+              Securing Session & Live Data...
+            </p>
+          </div>
+
+          {/* Spinner bar */}
+          <div style={{
+            width: '180px',
+            height: '4px',
+            background: 'rgba(255, 255, 255, 0.06)',
+            borderRadius: '10px',
+            overflow: 'hidden',
+            position: 'relative'
+          }}>
+            <div className="loading-bar-inner" style={{
+              position: 'absolute',
+              height: '100%',
+              width: '40%',
+              background: 'linear-gradient(90deg, #3b82f6, #60a5fa)',
+              borderRadius: '10px',
+              animation: 'loading-slide 1.5s infinite ease-in-out'
+            }} />
+          </div>
+        </div>
+        <style>{`
+          @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 0.95; }
+            50% { transform: scale(1.05); opacity: 1; box-shadow: 0 25px 50px -12px rgba(59, 130, 246, 0.25); }
+          }
+          @keyframes loading-slide {
+            0% { left: -40%; }
+            50% { left: 60%; }
+            100% { left: 100%; }
+          }
+        `}</style>
       </div>
     );
   }

@@ -137,7 +137,7 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
         auth_id: authUserId
       });
 
-      setSuccessMsg(isEditing ? 'Access role profile modified!' : 'Supabase Auth account created & profile initialized!');
+      setSuccessMsg(isEditing ? 'Staff user updated successfully.' : 'Staff user created successfully.');
       
       setTimeout(() => {
         setShowAssignModal(false);

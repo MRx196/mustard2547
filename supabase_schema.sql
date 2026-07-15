@@ -34,7 +34,7 @@ CREATE TABLE users (
     created_at TEXT NOT NULL,
     username TEXT,
     phone_number TEXT,
-    auth_id TEXT -- references auth.users(id) via Supabase Auth metadata
+    auth_id UUID -- references auth.users(id) via Supabase Auth metadata
 );
 
 -- Index to quickly resolve Auth ID to public user profile
@@ -201,7 +201,7 @@ CREATE TABLE momo_transactions (
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS text SECURITY DEFINER AS $$
 BEGIN
-  RETURN (SELECT role FROM public.users WHERE auth_id = auth.uid()::text LIMIT 1);
+  RETURN (SELECT role FROM public.users WHERE auth_id = auth.uid() LIMIT 1);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -277,5 +277,5 @@ CREATE POLICY "momo_modify" ON public.momo_transactions FOR ALL TO authenticated
 
 -- Seed Default Production Super Administrator Profile
 INSERT INTO users (email, full_name, role, status, last_signin, created_at, username, phone_number, auth_id)
-VALUES ('mrxmail20@gmail.com', 'Super Admin', 'Super Administrator', 'Active', 'N/A', '2026-07-15T10:21:40Z', 'superadmin', '+233240001100', '')
+VALUES ('mrxmail20@gmail.com', 'Super Admin', 'Super Administrator', 'Active', 'N/A', '2026-07-15T10:21:40Z', 'superadmin', '+233240001100', NULL)
 ON CONFLICT (email) DO NOTHING;

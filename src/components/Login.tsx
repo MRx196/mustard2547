@@ -57,32 +57,43 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       }
 
       if (data.user) {
-        // Resolve profile from public table
-        let userProfile = profileMatch;
+        // Resolve profile from public table as single source of truth
+        const { data: dbProfile } = await supabase.from('users').select('*').eq('email', email).single();
+        
+        let userProfile = dbProfile;
         if (!userProfile) {
           userProfile = {
             email: data.user.email || email,
-            full_name: data.user.user_metadata?.full_name || 'Super Admin',
-            role: data.user.user_metadata?.role || 'Super Administrator',
+            full_name: data.user.user_metadata?.full_name || 'Staff User',
+            role: data.user.user_metadata?.role || 'Auditor',
             status: 'Active',
             last_signin: new Date().toISOString(),
             created_at: new Date().toISOString(),
             username: email.split('@')[0],
             auth_id: data.user.id
           };
-          const currentStaff = mockDb.getStaffUsers();
-          currentStaff.push(userProfile);
-          localStorage.setItem('staff_users', JSON.stringify(currentStaff));
+          await supabase.from('users').insert(userProfile);
         } else {
-          // Update profile mapping
-          const updated = staffList.map(u => {
-            if (u.email.toLowerCase() === email.toLowerCase()) {
-              return { ...u, auth_id: data.user.id, last_signin: new Date().toISOString() };
-            }
-            return u;
-          });
-          localStorage.setItem('staff_users', JSON.stringify(updated));
+          // If profile exists, make sure auth_id is updated in the DB
+          if (!userProfile.auth_id || userProfile.auth_id !== data.user.id) {
+            userProfile.auth_id = data.user.id;
+            await supabase.rpc('link_own_auth_id');
+          }
         }
+
+        // Also update local storage staff list to keep local state synced
+        const latestStaff = mockDb.getStaffUsers();
+        const existingIdx = latestStaff.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+        if (existingIdx !== -1) {
+          latestStaff[existingIdx] = {
+            ...latestStaff[existingIdx],
+            auth_id: data.user.id,
+            last_signin: new Date().toISOString()
+          };
+        } else {
+          latestStaff.push(userProfile);
+        }
+        localStorage.setItem('staff_users', JSON.stringify(latestStaff));
 
         setSuccessMsg('Sign in successful! Redirecting...');
         setTimeout(() => {
