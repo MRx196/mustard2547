@@ -116,7 +116,7 @@ export const GuarantorManagement: React.FC<GuarantorManagementProps> = ({
     }
   };
 
-  const isReadOnly = userRole === 'Member';
+  const isReadOnly = userRole === 'Member' || userRole === 'Auditor';
 
   // Filter members list based on memberSearchTerm in selection box
   const searchableMembers = members.filter(m =>

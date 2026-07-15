@@ -1,5 +1,5 @@
--- Mustard Seed Welfare Fund (SEGE DISTRICT) - Corrected Supabase SQL Schema
--- Aligning database columns and types exactly with the application's React state and mockDb requirements.
+-- Mustard Seed Welfare Fund (SEGE DISTRICT) - Production Supabase SQL Schema
+-- Full migration to Supabase Authentication & Row Level Security (RLS) policies
 
 -- Drop old tables if they exist to start fresh
 DROP TABLE IF EXISTS momo_transactions CASCADE;
@@ -13,7 +13,8 @@ DROP TABLE IF EXISTS loans CASCADE;
 DROP TABLE IF EXISTS transactions CASCADE;
 DROP TABLE IF EXISTS beneficiaries CASCADE;
 DROP TABLE IF EXISTS members CASCADE;
-DROP TABLE IF EXISTS staff_users CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+DROP TABLE IF EXISTS staff_users CASCADE; -- drop deprecated table name if lingering
 DROP TABLE IF EXISTS congregations CASCADE;
 
 -- 1. Congregations Table
@@ -23,8 +24,8 @@ CREATE TABLE congregations (
     created_at TEXT NOT NULL
 );
 
--- 2. Staff Users Table
-CREATE TABLE staff_users (
+-- 2. Custom Users Profile Table (linked to Supabase auth.users)
+CREATE TABLE users (
     email TEXT PRIMARY KEY,
     full_name TEXT NOT NULL,
     role TEXT NOT NULL,
@@ -33,8 +34,11 @@ CREATE TABLE staff_users (
     created_at TEXT NOT NULL,
     username TEXT,
     phone_number TEXT,
-    auth_user_id TEXT
+    auth_id TEXT -- references auth.users(id) via Supabase Auth metadata
 );
+
+-- Index to quickly resolve Auth ID to public user profile
+CREATE INDEX idx_users_auth_id ON users(auth_id);
 
 -- 3. Members Table
 CREATE TABLE members (
@@ -54,7 +58,6 @@ CREATE TABLE members (
     created_at TEXT NOT NULL
 );
 
--- Index for quick lookups on account numbers and phone numbers
 CREATE INDEX idx_members_account_number ON members(account_number);
 CREATE INDEX idx_members_phone_number ON members(phone_number);
 
@@ -190,75 +193,89 @@ CREATE TABLE momo_transactions (
     reference TEXT UNIQUE NOT NULL
 );
 
--- Double-layered RLS bypass: Enable RLS, create permissive public policies for anon reads and writes, then disable RLS.
--- This ensures that under both states (RLS enabled or RLS disabled), REST client operations succeed.
+--------------------------------------------------------------------------------
+-- SECURE ROLE-BASED ACCESS CONTROL (RLS) IMPLEMENTATION
+--------------------------------------------------------------------------------
 
+-- Security definer lookup helper function to resolve auth user role without policy recursion loops
+CREATE OR REPLACE FUNCTION public.get_user_role()
+RETURNS text SECURITY DEFINER AS $$
+BEGIN
+  RETURN (SELECT role FROM public.users WHERE auth_id = auth.uid() LIMIT 1);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Enable Row Level Security (RLS) on all tables
 ALTER TABLE congregations ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all congregations" ON congregations;
-CREATE POLICY "Permit all congregations" ON congregations FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE congregations DISABLE ROW LEVEL SECURITY;
-
-ALTER TABLE staff_users ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all staff_users" ON staff_users;
-CREATE POLICY "Permit all staff_users" ON staff_users FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE staff_users DISABLE ROW LEVEL SECURITY;
-
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE members ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all members" ON members;
-CREATE POLICY "Permit all members" ON members FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE members DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE beneficiaries ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all beneficiaries" ON beneficiaries;
-CREATE POLICY "Permit all beneficiaries" ON beneficiaries FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE beneficiaries DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all transactions" ON transactions;
-CREATE POLICY "Permit all transactions" ON transactions FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all loans" ON loans;
-CREATE POLICY "Permit all loans" ON loans FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE loans DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE guarantors ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all guarantors" ON guarantors;
-CREATE POLICY "Permit all guarantors" ON guarantors FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE guarantors DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE sms_templates ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all sms_templates" ON sms_templates;
-CREATE POLICY "Permit all sms_templates" ON sms_templates FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE sms_templates DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE sms_logs ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all sms_logs" ON sms_logs;
-CREATE POLICY "Permit all sms_logs" ON sms_logs FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE sms_logs DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all audit_logs" ON audit_logs;
-CREATE POLICY "Permit all audit_logs" ON audit_logs FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE audit_logs DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE chart_of_accounts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all chart_of_accounts" ON chart_of_accounts;
-CREATE POLICY "Permit all chart_of_accounts" ON chart_of_accounts FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE chart_of_accounts DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE journal_entries ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all journal_entries" ON journal_entries;
-CREATE POLICY "Permit all journal_entries" ON journal_entries FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE journal_entries DISABLE ROW LEVEL SECURITY;
-
 ALTER TABLE momo_transactions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Permit all momo_transactions" ON momo_transactions;
-CREATE POLICY "Permit all momo_transactions" ON momo_transactions FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE momo_transactions DISABLE ROW LEVEL SECURITY;
 
--- Seed Default Super Administrator
-INSERT INTO staff_users (email, full_name, role, status, last_signin, created_at, username, phone_number, auth_user_id)
-VALUES ('mrxmail20@gmail.com', 'Super Admin', 'Super Administrator', 'Active', 'N/A', '2026-07-14T16:27:39Z', 'superadmin', '+233240001100', '')
+-- 1. users Table Policies
+CREATE POLICY "users_select" ON public.users FOR SELECT TO authenticated USING (true);
+CREATE POLICY "users_write" ON public.users FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator'));
+
+-- 2. congregations Table Policies
+CREATE POLICY "cong_select" ON public.congregations FOR SELECT TO authenticated USING (true);
+CREATE POLICY "cong_all" ON public.congregations FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- 3. members Table Policies
+CREATE POLICY "members_select" ON public.members FOR SELECT TO authenticated USING (true);
+CREATE POLICY "members_all" ON public.members FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- 4. beneficiaries Table Policies
+CREATE POLICY "beneficiaries_select" ON public.beneficiaries FOR SELECT TO authenticated USING (true);
+CREATE POLICY "beneficiaries_all" ON public.beneficiaries FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- 5. transactions Table Policies
+CREATE POLICY "tx_select" ON public.transactions FOR SELECT TO authenticated USING (true);
+CREATE POLICY "tx_insert" ON public.transactions FOR INSERT TO authenticated WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant', 'Collection Officer', 'Collections Officer'));
+CREATE POLICY "tx_modify" ON public.transactions FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- 6. loans Table Policies
+CREATE POLICY "loans_select" ON public.loans FOR SELECT TO authenticated USING (true);
+CREATE POLICY "loans_all" ON public.loans FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Loan Officer')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Loan Officer'));
+
+-- 7. guarantors Table Policies
+CREATE POLICY "guarantors_select" ON public.guarantors FOR SELECT TO authenticated USING (true);
+CREATE POLICY "guarantors_all" ON public.guarantors FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Loan Officer')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Loan Officer'));
+
+-- 8. sms_templates Table Policies
+CREATE POLICY "sms_templates_select" ON public.sms_templates FOR SELECT TO authenticated USING (true);
+CREATE POLICY "sms_templates_all" ON public.sms_templates FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- 9. sms_logs Table Policies
+CREATE POLICY "sms_logs_select" ON public.sms_logs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "sms_logs_all" ON public.sms_logs FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- 10. audit_logs Table Policies
+CREATE POLICY "audit_select" ON public.audit_logs FOR SELECT TO authenticated USING (true);
+CREATE POLICY "audit_insert" ON public.audit_logs FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "audit_modify" ON public.audit_logs FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin'));
+
+-- 11. chart_of_accounts Table Policies
+CREATE POLICY "coa_select" ON public.chart_of_accounts FOR SELECT TO authenticated USING (true);
+CREATE POLICY "coa_all" ON public.chart_of_accounts FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- 12. journal_entries Table Policies
+CREATE POLICY "journal_select" ON public.journal_entries FOR SELECT TO authenticated USING (true);
+CREATE POLICY "journal_all" ON public.journal_entries FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- 13. momo_transactions Table Policies
+CREATE POLICY "momo_select" ON public.momo_transactions FOR SELECT TO authenticated USING (true);
+CREATE POLICY "momo_insert" ON public.momo_transactions FOR INSERT TO authenticated WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant', 'Collection Officer', 'Collections Officer'));
+CREATE POLICY "momo_modify" ON public.momo_transactions FOR ALL TO authenticated USING (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant')) WITH CHECK (public.get_user_role() IN ('Super Administrator', 'Super Admin', 'Administrator', 'Accountant'));
+
+-- Seed Default Production Super Administrator Profile
+INSERT INTO users (email, full_name, role, status, last_signin, created_at, username, phone_number, auth_id)
+VALUES ('mrxmail20@gmail.com', 'Super Admin', 'Super Administrator', 'Active', 'N/A', '2026-07-15T10:21:40Z', 'superadmin', '+233240001100', '')
 ON CONFLICT (email) DO NOTHING;

@@ -137,7 +137,7 @@ export interface StaffUser {
   created_at: string;
   username?: string;
   phone_number?: string;
-  auth_user_id?: string;
+  auth_id?: string;
 }
 
 export interface AuditLog {

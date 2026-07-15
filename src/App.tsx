@@ -23,7 +23,7 @@ import { SecurityAudit } from './components/SecurityAudit';
 import { 
   Users, CreditCard, Landmark, TrendingUp, DollarSign, 
   MessageSquare, ShieldCheck, Sun, Moon, Menu, Landmark as BankIcon, 
-  ArrowUpRight, ArrowDownRight, UserCheck, ShieldAlert, Key, LogOut
+  ArrowUpRight, ArrowDownRight, UserCheck, ShieldAlert, Key, LogOut, AlertCircle
 } from 'lucide-react';
 
 function App() {
@@ -51,16 +51,82 @@ function App() {
   const [smsWallet, setSmsWallet] = useState<number>(0);
 
   // Initialize DB and fetch local session
+  // Password reset recovery state check
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
   useEffect(() => {
     mockDb.initialize();
     
     // Start database keep-alive background ping service
     keepAliveService.start();
     
-    // Recover user session
-    const stored = localStorage.getItem('current_user');
-    if (stored) {
-      setCurrentUser(JSON.parse(stored));
+    // Recover user session from Supabase Auth
+    const checkUserSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session && session.user) {
+        const email = session.user.email;
+        if (email) {
+          const { data: profile } = await supabase.from('users').select('*').eq('email', email).single();
+          if (profile) {
+            setCurrentUser(profile);
+          } else {
+            const userProfile: StaffUser = {
+              email: session.user.email || '',
+              full_name: session.user.user_metadata?.full_name || 'Staff User',
+              role: session.user.user_metadata?.role || 'Auditor',
+              status: 'Active',
+              last_signin: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              username: session.user.email?.split('@')[0],
+              phone_number: '',
+              auth_id: session.user.id
+            };
+            setCurrentUser(userProfile);
+          }
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    };
+    checkUserSession();
+
+    // Listen to Auth State Changes
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        const email = session.user.email;
+        if (email) {
+          const { data: profile } = await supabase.from('users').select('*').eq('email', email).single();
+          if (profile) {
+            setCurrentUser(profile);
+          } else {
+            const userProfile: StaffUser = {
+              email: session.user.email || '',
+              full_name: session.user.user_metadata?.full_name || 'Staff User',
+              role: session.user.user_metadata?.role || 'Auditor',
+              status: 'Active',
+              last_signin: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              username: session.user.email?.split('@')[0],
+              phone_number: '',
+              auth_id: session.user.id
+            };
+            setCurrentUser(userProfile);
+          }
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+      } else if (event === 'PASSWORD_RECOVERY') {
+        setIsResettingPassword(true);
+      }
+    });
+
+    // Check if recovery is indicated in the URL
+    if (window.location.hash.includes('type=recovery') || window.location.search.includes('type=recovery')) {
+      setIsResettingPassword(true);
     }
     
     // Register local refresh handler to trigger whenever sync resolves
@@ -85,6 +151,7 @@ function App() {
       .subscribe();
 
     return () => {
+      authSubscription.unsubscribe();
       supabase.removeChannel(channel);
     };
   }, []);
@@ -117,15 +184,44 @@ function App() {
 
   // Login/Logout hooks
   const handleLoginSuccess = (profile: StaffUser) => {
-    localStorage.setItem('current_user', JSON.stringify(profile));
     setCurrentUser(profile);
     setSelectedTab('dashboard');
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('current_user');
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setCurrentUser(null);
     setSelectedTab('dashboard');
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+    setResetSuccess('');
+    setResetLoading(true);
+
+    if (newPasswordInput.length < 6) {
+      setResetError('Password must be at least 6 characters.');
+      setResetLoading(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPasswordInput });
+      if (error) throw error;
+
+      setResetSuccess('Your password has been reset successfully! Redirecting...');
+      setNewPasswordInput('');
+      setTimeout(() => {
+        setIsResettingPassword(false);
+        // Clear recovery parameters from URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }, 2000);
+    } catch (err: any) {
+      setResetError(err.message || 'Failed to update password.');
+    } finally {
+      setResetLoading(false);
+    }
   };
 
   // Toggle Theme
@@ -220,7 +316,7 @@ function App() {
   };
 
   // 10. Staff roles assignment
-  const handleAssignRole = async (profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_user_id?: string }) => {
+  const handleAssignRole = async (profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_id?: string }) => {
     await mockDb.assignUserRole(profile, getOperatorDetails());
   };
 
@@ -277,6 +373,68 @@ function App() {
       setSidebarOpen(false);
     }
   };
+
+  // Password Recovery / Reset guard
+  if (isResettingPassword) {
+    return (
+      <div style={{ display: 'flex', minHeight: '100vh', width: '100%', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div style={{ width: '100%', maxWidth: '440px', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '40px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+            <div style={{ background: '#0F4C81', color: 'white', width: '40px', height: '40px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Landmark size={20} />
+            </div>
+            <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', margin: 0 }}>Update Password</h2>
+          </div>
+          <p style={{ fontSize: '14px', color: '#64748B', margin: '0 0 28px 0' }}>Set your new password to regain access.</p>
+          <form onSubmit={handleUpdatePassword}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {resetError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#FEF2F2', borderLeft: '4px solid #EF4444', color: '#B91C1C', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <span>{resetError}</span>
+                </div>
+              )}
+              {resetSuccess && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#ECFDF5', borderLeft: '4px solid #10B981', color: '#047857', padding: '12px', borderRadius: '6px', fontSize: '13px' }}>
+                  <ShieldCheck size={16} style={{ flexShrink: 0 }} />
+                  <span>{resetSuccess}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>New Password</label>
+                <input
+                  type="password"
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  style={{ width: '100%', padding: '10px 14px', border: '1px solid #D1D5DB', borderRadius: '8px', fontSize: '14px', outline: 'none', background: '#FFFFFF', color: '#0F172A' }}
+                  placeholder="At least 6 characters"
+                  required
+                  autoFocus
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={resetLoading}
+                style={{ width: '100%', padding: '12px', background: '#0F4C81', color: '#FFFFFF', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                {resetLoading ? 'Saving...' : 'Save New Password'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsResettingPassword(false);
+                  window.history.replaceState({}, document.title, window.location.pathname);
+                }}
+                style={{ width: '100%', padding: '12px', background: 'none', border: 'none', color: '#64748B', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+              >
+                Back to Login
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   // Root authentication guard
   if (!currentUser) {

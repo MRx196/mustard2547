@@ -84,7 +84,7 @@ export const WithdrawalManagement: React.FC<WithdrawalManagementProps> = ({
     }
   };
 
-  const isReadOnly = userRole === 'Member';
+  const isReadOnly = userRole === 'Member' || userRole === 'Auditor';
 
   return (
     <div className="flex flex-col gap-16 w-full">

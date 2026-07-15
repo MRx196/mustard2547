@@ -64,7 +64,7 @@ export const CongregationManagement: React.FC<CongregationManagementProps> = ({
     }
   };
 
-  const isReadOnly = userRole === 'Member' || userRole === 'Collection Officer';
+  const isReadOnly = userRole === 'Member' || userRole === 'Collection Officer' || userRole === 'Auditor';
 
   return (
     <div className="flex flex-col gap-16 w-full">

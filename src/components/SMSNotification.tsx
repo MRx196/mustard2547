@@ -242,7 +242,7 @@ export const SMSNotification: React.FC<SMSNotificationProps> = ({
     m.account_number.toLowerCase().includes(memberSearchTerm.toLowerCase())
   );
 
-  const isReadOnly = userRole === 'Member';
+  const isReadOnly = userRole === 'Member' || userRole === 'Auditor';
 
   return (
     <div className="flex flex-col gap-16 w-full">

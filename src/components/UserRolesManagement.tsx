@@ -6,7 +6,7 @@ import { Plus, Search, Edit2, CheckCircle, AlertCircle, Trash2, Key, Eye, EyeOff
 interface UserRolesManagementProps {
   staffUsers: StaffUser[];
   members: Member[];
-  onAssignRole: (profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_user_id?: string }) => void;
+  onAssignRole: (profile: { email: string; role: string; full_name?: string; username?: string; phone_number?: string; status?: 'Active' | 'Inactive'; auth_id?: string }) => void;
   onRevokeRole: (email: string) => void;
   userRole: string;
 }
@@ -126,7 +126,7 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
         username: username || email.split('@')[0],
         phone_number: phone,
         status,
-        auth_user_id: authUserId
+        auth_id: authUserId
       });
 
       setSuccessMsg(isEditing ? 'Access role profile modified!' : 'Supabase Auth account created & profile initialized!');

@@ -188,7 +188,7 @@ export const MemberManagement: React.FC<MemberManagementProps> = ({
     window.print();
   };
 
-  const isReadOnly = userRole === 'Member' || userRole === 'Collection Officer';
+  const isReadOnly = userRole === 'Member' || userRole === 'Collection Officer' || userRole === 'Auditor';
 
   return (
     <div className="flex flex-col gap-16 w-full">

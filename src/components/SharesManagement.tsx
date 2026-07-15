@@ -151,7 +151,7 @@ export const SharesManagement: React.FC<SharesManagementProps> = ({
     return (totalShares * (pct / 100));
   };
 
-  const isReadOnly = userRole === 'Member';
+  const isReadOnly = userRole === 'Member' || userRole === 'Auditor';
   const isAccountantOrAdmin = userRole === 'Super Admin' || userRole === 'Administrator' || userRole === 'Accountant';
 
   // Filter members list based on memberSearchTerm in selection box

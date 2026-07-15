@@ -78,7 +78,7 @@ export const SavingsManagement: React.FC<SavingsManagementProps> = ({
     }
   };
 
-  const isReadOnly = userRole === 'Member';
+  const isReadOnly = userRole === 'Member' || userRole === 'Auditor';
 
   return (
     <div className="flex flex-col gap-16 w-full">
