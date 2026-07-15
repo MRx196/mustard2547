@@ -201,7 +201,7 @@ CREATE TABLE momo_transactions (
 CREATE OR REPLACE FUNCTION public.get_user_role()
 RETURNS text SECURITY DEFINER AS $$
 BEGIN
-  RETURN (SELECT role FROM public.users WHERE auth_id = auth.uid() LIMIT 1);
+  RETURN (SELECT role FROM public.users WHERE auth_id = auth.uid()::text LIMIT 1);
 END;
 $$ LANGUAGE plpgsql;
 

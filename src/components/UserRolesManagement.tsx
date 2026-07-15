@@ -105,13 +105,21 @@ export const UserRolesManagement: React.FC<UserRolesManagementProps> = ({
           return;
         }
 
-        const { data, error } = await signUpStaffUser(email, passwordInput);
+        const { data, error } = await signUpStaffUser(email, passwordInput, {
+          full_name: fullName,
+          role: role
+        });
         if (error) {
           // If signup fails, throw error unless it's a seed duplicate warning
-          if (!error.message.includes('already registered')) {
+          if (!error.message.includes('already registered') && !error.message.includes('already exists')) {
             setErrorMsg(error.message || 'Supabase Auth registration failed.');
             setLoading(false);
             return;
+          }
+          // Recover authUserId from local profile list if duplicate
+          const existing = staffUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+          if (existing && existing.auth_id) {
+            authUserId = existing.auth_id;
           }
         } else if (data && data.user) {
           authUserId = data.user.id;

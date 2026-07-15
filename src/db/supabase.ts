@@ -20,19 +20,42 @@ const config = getSupabaseConfig();
 
 export const supabase = createClient(config.url, config.anonKey);
 
-// Sign Up isolated staff account (prevents logging out the active admin session)
-export const signUpStaffUser = async (email: string, password: string) => {
+// Sign Up isolated staff account via direct REST request to prevent logging out the active admin session
+// and to avoid "Multiple GoTrueClient instances detected" console warning.
+export const signUpStaffUser = async (email: string, password: string, metadata?: { full_name: string; role: string }) => {
   const cfg = getSupabaseConfig();
-  const tempClient = createClient(cfg.url, cfg.anonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false
+  try {
+    const response = await fetch(`${cfg.url}/auth/v1/signup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': cfg.anonKey
+      },
+      body: JSON.stringify({ 
+        email, 
+        password,
+        options: {
+          data: metadata || {}
+        }
+      })
+    });
+    
+    const data = await response.json();
+    if (!response.ok) {
+      return { data: null, error: { message: data.msg || data.error_description || 'Signup failed.' } };
     }
-  });
-  
-  const { data, error } = await tempClient.auth.signUp({ email, password });
-  return { data, error };
+    
+    // Support both root-level user (email confirmation on) and session-wrapped user (email confirmation off)
+    const resolvedUser = data.user || data;
+    const resolvedId = data.id || data.user?.id;
+    if (resolvedId && !resolvedUser.id) {
+      resolvedUser.id = resolvedId;
+    }
+    
+    return { data: { user: resolvedUser }, error: null };
+  } catch (err: any) {
+    return { data: null, error: { message: err.message || 'Signup failed due to network error.' } };
+  }
 };
 
 export interface Congregation {
